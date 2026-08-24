@@ -32,6 +32,8 @@ env:
   # Security thresholds
   FAIL_CVSS_THRESHOLD: '7.0'
   JAVA_VERSION: '17'
+  # Use Node 24 (latest)
+  ACTIONS_STEP_DEBUG: 'false'
 
 jobs:
   # ============================================
@@ -169,6 +171,7 @@ jobs:
       
       # Run Semgrep (OWASP Top 10)
       - name: Run Semgrep OWASP Top 10
+        id: semgrep
         uses: returntocorp/semgrep-action@v1
         with:
           config: |
@@ -182,6 +185,9 @@ jobs:
             p/security-audit.secrets
           audit_on: true
           generate_suppression: true
+          output: |
+            semgrep-results.json:json
+            semgrep-results.sarif:sarif
       
       # Perform CodeQL Analysis
       - name: Perform CodeQL Analysis
@@ -207,6 +213,7 @@ jobs:
             semgrep-results.json
             semgrep-results.sarif
           retention-days: 30
+          if-no-files-found: warn
 
   # ============================================
   # SCA - ALWAYS RUNS (Dependency Scanning)
@@ -230,8 +237,8 @@ jobs:
       
       # OWASP Dependency-Check (scans all dependency types)
       - name: Run OWASP Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@main
         id: depcheck
+        uses: dependency-check/Dependency-Check_Action@main
         with:
           project: '${{ github.repository }}'
           path: '.'
@@ -251,8 +258,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report-${{ github.run_id }}
-          path: '${{ steps.depcheck.outputs.reportPath }}'
+          path: ${{ steps.depcheck.outputs.reportPath }}
           retention-days: 30
+          if-no-files-found: warn
 
   # ============================================
   # CONTAINER SECURITY - IF DOCKER DETECTED
@@ -276,6 +284,7 @@ jobs:
       
       # Scan with Trivy
       - name: Run Trivy Image Scanner
+        id: trivy-image
         if: hashFiles('Dockerfile') != ''
         uses: aquasecurity/trivy-action@master
         with:
@@ -288,6 +297,7 @@ jobs:
       
       # Scan Dockerfile
       - name: Run Trivy FS Scanner
+        id: trivy-fs
         if: hashFiles('Dockerfile') != ''
         uses: aquasecurity/trivy-action@master
         with:
@@ -297,19 +307,20 @@ jobs:
           output: 'trivy-fs-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
       
-      # Upload results
+      # Upload Trivy Image results
       - name: Upload Trivy Image Report
-        if: always()
+        if: always() && steps.trivy-image.outputs.sarif != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-image-results.sarif'
+          sarif_file: trivy-image-results.sarif
           category: 'trivy-image'
       
+      # Upload Trivy FS results
       - name: Upload Trivy FS Report
-        if: always()
+        if: always() && steps.trivy-fs.outputs.sarif != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-fs-results.sarif'
+          sarif_file: trivy-fs-results.sarif
           category: 'trivy-fs'
 
   # ============================================
@@ -328,6 +339,7 @@ jobs:
       
       # Run Checkov
       - name: Run Checkov
+        id: checkov
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: '.'
@@ -338,10 +350,10 @@ jobs:
       
       # Upload results
       - name: Upload Checkov Report
-        if: always()
+        if: always() && steps.checkov.outputs.sarif != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'checkov-results.sarif'
+          sarif_file: checkov-results.sarif
           category: 'checkov'
 
   # ============================================
@@ -360,6 +372,7 @@ jobs:
       
       # Run Kubesec
       - name: Run Kubesec
+        id: kubesec
         uses: controlplane-tech/kubesec-action@v1
         with:
           path: '.'
@@ -367,12 +380,13 @@ jobs:
       
       # Upload results
       - name: Upload Kubesec Report
-        if: always()
+        if: always() && steps.kubesec.outputs.json != ''
         uses: actions/upload-artifact@v4
         with:
           name: k8s-security-${{ github.run_id }}
-          path: 'kubesec-results.json'
+          path: kubesec-results.json
           retention-days: 30
+          if-no-files-found: warn
 
   # ============================================
   # SECURITY SUMMARY
