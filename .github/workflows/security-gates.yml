@@ -1,0 +1,188 @@
+name: Complete Security Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # Gate 1: Secret Detection (Gitleaks - FREE)
+  secret-detection:
+    name: Gate 1 - Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
+
+  # Gate 2: Dependency Scanning (npm audit - FREE)
+  dependency-scan:
+    name: Gate 2 - Dependency Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+
+  # Gate 3: Container Scanning (Trivy - FREE)
+  container-scan:
+    name: Gate 3 - Container Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t app:${{ github.sha }} .
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: app:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF report
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+  # Gate 4: SAST - CodeQL (FREE)
+  codeql-sast:
+    name: Gate 4 - CodeQL SAST
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
+
+  # Gate 5: OWASP ZAP DAST Scan (FREE)
+  owasp-zap-dast:
+    name: Gate 5 - OWASP ZAP DAST
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t app:${{ github.sha }} .
+
+      - name: Start application
+        run: |
+          docker run -d --name test-app -p 3000:3000 app:${{ github.sha }}
+          sleep 15
+
+      - name: Wait for health check
+        run: |
+          for i in {1..10}; do
+            if curl -s http://localhost:3000/health > /dev/null; then
+              echo "Application is healthy!"
+              break
+            fi
+            echo "Waiting for application... (attempt $i)"
+            sleep 3
+          done
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:3000'
+          rules_file_name: '.zap/rules.tsv'
+          format: 'HTML'
+          output_file: 'zap-report.html'
+          artifact_name: 'zap-report'
+
+      - name: Stop application
+        if: always()
+        run: |
+          docker stop test-app || true
+          docker rm test-app || true
+
+  # Security Summary
+  security-summary:
+    name: Security Summary
+    needs: [secret-detection, dependency-scan, container-scan, codeql-sast, owasp-zap-dast]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "=== Complete FREE Security Pipeline Summary ==="
+          
+          if [ "${{ needs.secret-detection.result }}" != "success" ]; then
+            echo "❌ Gate 1 - Secret Detection: FAILED"
+            exit 1
+          else
+            echo "✅ Gate 1 - Secret Detection: PASSED"
+          fi
+          
+          if [ "${{ needs.dependency-scan.result }}" != "success" ]; then
+            echo "❌ Gate 2 - Dependency Scanning: FAILED"
+            exit 1
+          else
+            echo "✅ Gate 2 - Dependency Scanning: PASSED"
+          fi
+          
+          if [ "${{ needs.container-scan.result }}" != "success" ]; then
+            echo "❌ Gate 3 - Container Scanning: FAILED"
+            exit 1
+          else
+            echo "✅ Gate 3 - Container Scanning: PASSED"
+          fi
+          
+          if [ "${{ needs.codeql-sast.result }}" != "success" ]; then
+            echo "❌ Gate 4 - CodeQL SAST: FAILED"
+            exit 1
+          else
+            echo "✅ Gate 4 - CodeQL SAST: PASSED"
+          fi
+          
+          if [ "${{ needs.owasp-zap-dast.result }}" != "success" ]; then
+            echo "❌ Gate 5 - OWASP ZAP DAST: FAILED"
+            exit 1
+          else
+            echo "✅ Gate 5 - OWASP ZAP DAST: PASSED"
+          fi
+          
+          echo ""
+          echo "🎉 100% FREE Security Pipeline Complete!"
