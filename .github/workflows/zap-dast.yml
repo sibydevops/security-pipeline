@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "Application URL"
+        description: "Target URL"
         required: true
         type: string
 
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: OWASP ZAP Baseline Scan
+      - name: OWASP ZAP Baseline
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: ${{ inputs.target }}

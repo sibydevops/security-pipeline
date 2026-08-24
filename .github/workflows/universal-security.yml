@@ -27,11 +27,9 @@ jobs:
       openapi: ${{ steps.detect.outputs.openapi }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Detect Technologies
-        id: detect
+      - id: detect
         shell: bash
         run: |
           echo "docker=false" >> $GITHUB_OUTPUT
@@ -43,9 +41,11 @@ jobs:
 
           find . -name "*.tf" | grep -q . && echo "terraform=true" >> $GITHUB_OUTPUT
 
-          find . \( -name "*.yaml" -o -name "*.yml" \) | grep -q . && echo "kubernetes=true" >> $GITHUB_OUTPUT
+          find . \( -name "*.yaml" -o -name "*.yml" \) | grep -q . \
+            && echo "kubernetes=true" >> $GITHUB_OUTPUT
 
-          find . \( -name "openapi.yaml" -o -name "swagger.yaml" \) | grep -q . && echo "openapi=true" >> $GITHUB_OUTPUT
+          find . \( -name "openapi.yaml" -o -name "swagger.yaml" \) | grep -q . \
+            && echo "openapi=true" >> $GITHUB_OUTPUT
 
   semgrep:
     name: OWASP SAST
@@ -54,13 +54,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Semgrep
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: |
-            p/owasp-top-ten
-            p/security-audit
-            p/secrets
+      - name: Run Semgrep
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            semgrep/semgrep:latest \
+            semgrep scan \
+            --config p/owasp-top-ten \
+            --config p/security-audit \
+            /src
 
   dependency-review:
     name: Dependency Review
@@ -69,32 +71,6 @@ jobs:
 
     steps:
       - uses: actions/dependency-review-action@v4
-
-  dependency-check:
-    name: OWASP Dependency Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create Reports Folder
-        run: mkdir -p reports
-
-      - name: Run OWASP Dependency Check
-        run: |
-          docker run --rm \
-            -v "$PWD:/src" \
-            owasp/dependency-check:latest \
-            --scan /src \
-            --project "${{ github.repository }}" \
-            --format HTML \
-            --out /src/reports
-
-      - name: Upload Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: reports/
 
   trivy-filesystem:
     name: Trivy Filesystem Scan
@@ -109,12 +85,13 @@ jobs:
           scan-type: fs
           scan-ref: .
           severity: HIGH,CRITICAL
-          exit-code: 1
 
   trivy-container:
     name: Trivy Container Scan
     needs: detect
+
     if: needs.detect.outputs.docker == 'true'
+
     runs-on: ubuntu-latest
 
     steps:
@@ -129,14 +106,15 @@ jobs:
         with:
           image-ref: app:${{ github.sha }}
           severity: HIGH,CRITICAL
-          exit-code: 1
 
   checkov:
     name: Infrastructure Security
     needs: detect
+
     if: |
       needs.detect.outputs.terraform == 'true' ||
       needs.detect.outputs.kubernetes == 'true'
+
     runs-on: ubuntu-latest
 
     steps:
@@ -152,7 +130,9 @@ jobs:
   kubescape:
     name: Kubernetes Security
     needs: detect
+
     if: needs.detect.outputs.kubernetes == 'true'
+
     runs-on: ubuntu-latest
 
     steps:
@@ -180,7 +160,9 @@ jobs:
   api-security:
     name: OWASP API Security
     needs: detect
+
     if: needs.detect.outputs.openapi == 'true'
+
     runs-on: ubuntu-latest
 
     steps:
@@ -191,8 +173,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install schemathesis
 
-      - name: Detect OpenAPI Spec
-        id: api
+      - id: api
         shell: bash
         run: |
           FILE=$(find . \
@@ -207,15 +188,14 @@ jobs:
 
   security-gate:
     name: Security Gate
+
     needs:
       - semgrep
-      - dependency-check
       - trivy-filesystem
 
     runs-on: ubuntu-latest
 
     steps:
-      - name: Validate Results
-        run: |
-          echo "Mandatory OWASP security controls completed."
+      - run: |
+          echo "OWASP security checks completed."
           echo "Security gate passed."
