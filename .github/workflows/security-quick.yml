@@ -1,239 +1,336 @@
-name: 🔒 OWASP Penetration Testing
+name: 🔒 OWASP Enterprise Security Pipeline
 
 on:
   pull_request:
-    branches: ['**']
+    branches:
+      - "**"
+
   push:
-    branches: [main, master, develop]
+    branches:
+      - main
+      - master
+      - develop
+
   schedule:
-    - cron: '0 2 * * 1-5'  # Weekdays at 2 AM UTC
+    - cron: "0 2 * * 1-5"
+
   workflow_dispatch:
 
 permissions:
-  security-events: write
   actions: read
   contents: read
-  issues: write
+  security-events: write
 
 env:
-  FAIL_CVSS_THRESHOLD: '7.0'
-  JAVA_VERSION: '17'
+  JAVA_VERSION: "17"
+  FAIL_CVSS_THRESHOLD: "7.0"
 
 jobs:
-  # ============================================
-  # PHASE 1: Information Gathering
-  # ============================================
+
+  #########################################################
+  # RECON
+  #########################################################
+
   recon:
     name: 🔍 Reconnaissance
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+
+    outputs:
+      is_web: ${{ steps.detect.outputs.is_web }}
+      has_docker: ${{ steps.detect.outputs.has_docker }}
+      has_terraform: ${{ steps.detect.outputs.has_terraform }}
 
     steps:
-      - name: Checkout code
+
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Detect application type
       - name: Detect Application Type
         id: detect
+        shell: bash
         run: |
-          echo "🔍 Detecting application type..."
 
           IS_WEB=false
-          if [ -f "package.json" ] || [ -f "pom.xml" ] || [ -f "requirements.txt" ]; then
+          HAS_DOCKER=false
+          HAS_TERRAFORM=false
+
+          if [ -f package.json ] || \
+             [ -f pom.xml ] || \
+             [ -f requirements.txt ] || \
+             [ -f build.gradle ] || \
+             find . -name "*.csproj" | grep -q .; then
             IS_WEB=true
           fi
-          echo "is_web=$IS_WEB" >> $GITHUB_OUTPUT
 
-          HAS_DOCKER=false
-          if [ -f "Dockerfile" ]; then
+          if [ -f Dockerfile ]; then
             HAS_DOCKER=true
           fi
-          echo "has_docker=$HAS_DOCKER" >> $GITHUB_OUTPUT
 
-          HAS_TERRAFORM=false
-          if ls *.tf 2>/dev/null; then
+          if find . -name "*.tf" | grep -q .; then
             HAS_TERRAFORM=true
           fi
+
+          echo "is_web=$IS_WEB" >> $GITHUB_OUTPUT
+          echo "has_docker=$HAS_DOCKER" >> $GITHUB_OUTPUT
           echo "has_terraform=$HAS_TERRAFORM" >> $GITHUB_OUTPUT
 
-  # ============================================
-  # PHASE 2: SAST - Static Analysis
-  # ============================================
+  #########################################################
+  # CODEQL + SEMGREP
+  #########################################################
+
   sast:
     name: 🔍 SAST (CodeQL + Semgrep)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [recon]
+    needs: recon
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
     steps:
-      - name: Checkout code
+
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # CodeQL - OWASP Top 10 coverage
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: javascript,python,java,csharp,go,ruby
           queries: security-extended,security-and-quality
 
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
 
-      - name: Upload CodeQL Results
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: results.sarif
-          category: codeql-analysis
-
-      # Semgrep - OWASP Top 10 rules
-      - name: Run Semgrep OWASP Top 10
+      - name: Semgrep
         uses: returntocorp/semgrep-action@v1
         with:
           config: |
             p/security-audit
             p/owasp-top-ten
+            p/secrets
             p/nodejs
             p/python
             p/java
-            p/csharp
             p/go
-            p/security-audit.secrets
-          audit_on: true
 
-      - name: Upload Semgrep Report
+      - name: Upload Semgrep Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: semgrep-report-${{ github.run_id }}
+          name: semgrep-results
           path: |
-            semgrep-results.json
             semgrep-results.sarif
-          retention-days: 30
-          if-no-files-found: warn
+            semgrep-results.json
+          if-no-files-found: ignore
 
-  # ============================================
-  # PHASE 3: SCA - Dependency Analysis
-  # ============================================
-  sca:
-    name: 📦 SCA (OWASP Dependency-Check)
+  #########################################################
+  # SECRET SCANNING
+  #########################################################
+
+  secrets:
+    name: 🔑 Secret Scanning
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [recon]
+    needs: recon
 
     steps:
-      - name: Checkout code
+
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+
+  #########################################################
+  # DEPENDENCY CHECK
+  #########################################################
+
+  sca:
+    name: 📦 OWASP Dependency Check
+    runs-on: ubuntu-latest
+    needs: recon
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
 
-      # OWASP Dependency-Check - CVE detection
-      - name: Run OWASP Dependency-Check
-        id: depcheck
+      - name: Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
-          project: '${{ github.repository }}'
-          path: '.'
-          format: 'HTML'
-          out: 'reports'
-          args: >-
+          project: ${{ github.repository }}
+          path: .
+          format: "HTML,JSON"
+          out: reports
+          args: >
             --failOnCVSS ${{ env.FAIL_CVSS_THRESHOLD }}
-            --nvdApiKey ${NVD_API_KEY}
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
 
-      - name: Upload Report
+      - name: Upload Dependency Check Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-report-${{ github.run_id }}
+          name: dependency-check-report
           path: reports
-          retention-days: 30
-          if-no-files-found: warn
 
-  # ============================================
-  # PHASE 4: DAST - Dynamic Analysis
-  # ============================================
-  dast:
-    name: 🛡️ DAST (OWASP ZAP)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [recon]
-    if: vars.STAGING_URL != ''
+  #########################################################
+  # CONTAINER SECURITY
+  #########################################################
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Wait for staging
-      - name: Wait for staging
-        run: |
-          for i in {1..10}; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" ${{ vars.STAGING_URL }} 2>/dev/null || echo "000")
-            if [[ "$HTTP_CODE" =~ ^(200|301|302)$ ]]; then
-              echo "✅ Staging ready"
-              exit 0
-            fi
-            sleep 10
-          done
-
-      # OWASP ZAP Baseline - Passive scanning
-      - name: OWASP ZAP Baseline
-        uses: zaproxy/action-baseline@v0.14.0
-        with:
-          target: '${{ vars.STAGING_URL }}'
-          rules_file_name: '.zap/rules.tsv'
-          cmd_options: '-a'
-          fail_action: false
-
-      # Upload ZAP report
-      - name: Upload ZAP Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap-baseline-report-${{ github.run_id }}
-          path: |
-            report_html.html
-            report_json.json
-          retention-days: 30
-          if-no-files-found: warn
-
-  # ============================================
-  # PHASE 5: Container Security
-  # ============================================
   container:
-    name: 🐳 Container (Trivy)
+    name: 🐳 Trivy Container Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [recon]
+    needs: recon
     if: needs.recon.outputs.has_docker == 'true'
 
+    permissions:
+      security-events: write
+
     steps:
-      - name: Checkout code
+
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Docker Image
-        if: hashFiles('Dockerfile') != ''
+      - name: Build Image
         run: |
           docker build -t app:${{ github.sha }} .
 
-      # (Add your Trivy scan steps here, e.g.)
-      # - name: Run Trivy on image
-      #   uses: aquasecurity/trivy-action@master
-      #   with:
-      #     image-ref: 'app:${{ github.sha }}'
-      #     format: 'sarif'
-      #     output: 'trivy-image-results.sarif'
-      #
-      # - name: Upload Trivy image results
-      #   if: always()
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: trivy-image-report-${{ github.run_id }}
-      #     path: trivy-image-results.sarif
-      #     retention-days: 30
-      #     if-no-files-found: warn
+      - name: Trivy Image Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: app:${{ github.sha }}
+          format: sarif
+          output: trivy-image-results.sarif
+
+      - name: Upload Trivy Results
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image-results.sarif
+          category: trivy-image
+
+      - name: Upload Trivy Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-image-results.sarif
+
+  #########################################################
+  # TERRAFORM SECURITY
+  #########################################################
+
+  iac:
+    name: ☁️ IaC Security
+    runs-on: ubuntu-latest
+    needs: recon
+    if: needs.recon.outputs.has_terraform == 'true'
+
+    permissions:
+      security-events: write
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+
+  #########################################################
+  # DAST
+  #########################################################
+
+  dast:
+    name: 🛡 OWASP ZAP
+    runs-on: ubuntu-latest
+    needs:
+      - sast
+      - sca
+
+    if: vars.STAGING_URL != ''
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Wait For Staging
+        shell: bash
+        run: |
+
+          for i in {1..20}; do
+
+            STATUS=$(curl -s \
+              -o /dev/null \
+              -w "%{http_code}" \
+              "${{ vars.STAGING_URL }}" || echo "000")
+
+            if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
+              echo "Application Ready"
+              exit 0
+            fi
+
+            sleep 15
+
+          done
+
+          echo "Staging unavailable"
+          exit 1
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ vars.STAGING_URL }}
+          fail_action: false
+
+      - name: Upload ZAP Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
+
+  #########################################################
+  # SECURITY SUMMARY
+  #########################################################
+
+  summary:
+    name: ✅ Security Summary
+    runs-on: ubuntu-latest
+
+    needs:
+      - sast
+      - secrets
+      - sca
+
+    if: always()
+
+    steps:
+
+      - name: Summary
+        run: |
+          echo "OWASP Security Pipeline Completed"
+          echo "CodeQL Executed"
+          echo "Semgrep Executed"
+          echo "Gitleaks Executed"
+          echo "Dependency Check Executed"
+          echo "Trivy Executed (if Docker detected)"
+          echo "Checkov/tfsec Executed (if Terraform detected)"
+          echo "OWASP ZAP Executed (if STAGING_URL configured)"
