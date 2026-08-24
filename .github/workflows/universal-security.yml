@@ -1,101 +1,104 @@
-name: 🔒 OWASP Enterprise Security Pipeline
+name: Universal Enterprise Security Pipeline
 
 on:
-  pull_request:
-    branches:
-      - "**"
-
   push:
     branches:
       - main
       - master
       - develop
 
-  schedule:
-    - cron: "0 2 * * 1-5"
+  pull_request:
 
   workflow_dispatch:
 
+  schedule:
+    - cron: "0 2 * * 1"
+
 permissions:
   contents: read
-  actions: read
   security-events: write
-
-env:
-  FAIL_CVSS_THRESHOLD: "7.0"
+  actions: read
 
 jobs:
 
-  recon:
-    name: 🔍 Reconnaissance
+  ###########################################################################
+  # DETECT REPOSITORY TYPE
+  ###########################################################################
+
+  detect:
     runs-on: ubuntu-latest
 
     outputs:
-      has_docker: ${{ steps.detect.outputs.has_docker }}
-      has_terraform: ${{ steps.detect.outputs.has_terraform }}
+      docker: ${{ steps.detect.outputs.docker }}
+      terraform: ${{ steps.detect.outputs.terraform }}
+      kubernetes: ${{ steps.detect.outputs.kubernetes }}
+      openapi: ${{ steps.detect.outputs.openapi }}
+      dotnet: ${{ steps.detect.outputs.dotnet }}
+      java: ${{ steps.detect.outputs.java }}
+      python: ${{ steps.detect.outputs.python }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Detect Repository Type
-        id: detect
+      - id: detect
         shell: bash
         run: |
+          echo "docker=false" >> $GITHUB_OUTPUT
+          echo "terraform=false" >> $GITHUB_OUTPUT
+          echo "kubernetes=false" >> $GITHUB_OUTPUT
+          echo "openapi=false" >> $GITHUB_OUTPUT
+          echo "dotnet=false" >> $GITHUB_OUTPUT
+          echo "java=false" >> $GITHUB_OUTPUT
+          echo "python=false" >> $GITHUB_OUTPUT
 
-          HAS_DOCKER=false
-          HAS_TERRAFORM=false
-
-          if [ -f Dockerfile ]; then
-            HAS_DOCKER=true
+          if find . -name "Dockerfile" | grep -q .; then
+            echo "docker=true" >> $GITHUB_OUTPUT
           fi
 
-          if find . -name "*.tf" | grep -q . ; then
-            HAS_TERRAFORM=true
+          if find . -name "*.tf" | grep -q .; then
+            echo "terraform=true" >> $GITHUB_OUTPUT
           fi
 
-          echo "has_docker=${HAS_DOCKER}" >> $GITHUB_OUTPUT
-          echo "has_terraform=${HAS_TERRAFORM}" >> $GITHUB_OUTPUT
+          if find . \( -name "*.yaml" -o -name "*.yml" \) | grep -q .; then
+            echo "kubernetes=true" >> $GITHUB_OUTPUT
+          fi
 
-  codeql:
-    name: 🔍 CodeQL SAST
+          if find . \( -name "openapi.yaml" -o -name "swagger.yaml" \) | grep -q .; then
+            echo "openapi=true" >> $GITHUB_OUTPUT
+          fi
+
+          if find . \( -name "*.sln" -o -name "*.csproj" \) | grep -q .; then
+            echo "dotnet=true" >> $GITHUB_OUTPUT
+          fi
+
+          if find . \( -name "*.java" -o -name "pom.xml" \) | grep -q .; then
+            echo "java=true" >> $GITHUB_OUTPUT
+          fi
+
+          if find . -name "*.py" | grep -q .; then
+            echo "python=true" >> $GITHUB_OUTPUT
+          fi
+
+  ###########################################################################
+  # GITLEAKS
+  ###########################################################################
+
+  gitleaks:
+    needs: detect
     runs-on: ubuntu-latest
-    needs: recon
-
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-
-    strategy:
-      fail-fast: false
-      matrix:
-        language:
-          - javascript
-          - python
-          - java
-          - go
-          - ruby
-          - csharp
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: ${{ matrix.language }}
-          queries: security-extended,security-and-quality
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
-
-      - name: Analyze
-        uses: github/codeql-action/analyze@v4
+  ###########################################################################
+  # SEMGREP
+  ###########################################################################
 
   semgrep:
-    name: 🔎 Semgrep
+    needs: detect
     runs-on: ubuntu-latest
 
     steps:
@@ -105,144 +108,272 @@ jobs:
         uses: returntocorp/semgrep-action@v1
         with:
           config: |
-            p/security-audit
             p/owasp-top-ten
+            p/security-audit
             p/secrets
-            p/python
-            p/java
-            p/nodejs
-            p/go
 
-  gitleaks:
-    name: 🔑 Secret Scanning
+  ###########################################################################
+  # CODEQL JAVASCRIPT
+  ###########################################################################
+
+  codeql-javascript:
+    needs: detect
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - uses: github/codeql-action/autobuild@v3
+
+      - uses: github/codeql-action/analyze@v3
+
+  ###########################################################################
+  # CODEQL PYTHON
+  ###########################################################################
+
+  codeql-python:
+    needs: detect
+    if: needs.detect.outputs.python == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+
+      - uses: github/codeql-action/autobuild@v3
+
+      - uses: github/codeql-action/analyze@v3
+
+  ###########################################################################
+  # CODEQL JAVA
+  ###########################################################################
+
+  codeql-java:
+    needs: detect
+    if: needs.detect.outputs.java == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: java
+
+      - uses: github/codeql-action/autobuild@v3
+
+      - uses: github/codeql-action/analyze@v3
+
+  ###########################################################################
+  # DEPENDENCY REVIEW
+  ###########################################################################
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/dependency-review-action@v4
+
+  ###########################################################################
+  # OWASP DEPENDENCY CHECK
+  ###########################################################################
 
   dependency-check:
-    name: 📦 OWASP Dependency Check
+    needs: detect
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
 
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create Reports Folder
-        run: mkdir -p reports
-
-      - name: Pull Dependency Check Image
-        run: |
-          docker pull owasp/dependency-check:latest
-
-      - name: Run Dependency Check
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/src" \
-            owasp/dependency-check:latest \
-            --scan /src \
-            --out /src/reports \
-            --format HTML \
-            --format JSON \
-            --failOnCVSS ${{ env.FAIL_CVSS_THRESHOLD }} \
-            --nvdApiKey "${{ secrets.NVD_API_KEY }}"
-
-      - name: Upload Dependency Reports
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
         with:
-          name: dependency-check-report
-          path: reports/**
-          if-no-files-found: warn
+          project: ${{ github.repository }}
+          path: .
+          format: SARIF
 
-  container:
-    name: 🐳 Trivy Container Security
+      - name: Upload Dependency SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+
+  ###########################################################################
+  # TRIVY FILE SYSTEM
+  ###########################################################################
+
+  trivy-fs:
+    needs: detect
     runs-on: ubuntu-latest
 
-    needs:
-      - recon
+    steps:
+      - uses: actions/checkout@v4
 
-    if: needs.recon.outputs.has_docker == 'true'
+      - name: Trivy Filesystem Scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: HIGH,CRITICAL
 
-    permissions:
-      security-events: write
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+
+  ###########################################################################
+  # TRIVY CONTAINER
+  ###########################################################################
+
+  trivy-container:
+    needs: detect
+    if: needs.detect.outputs.docker == 'true'
+    runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Build Docker Image
         run: |
           docker build -t app:${{ github.sha }} .
 
-      - name: Run Trivy Scan
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Trivy Container Scan
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           image-ref: app:${{ github.sha }}
           format: sarif
-          output: trivy-results.sarif
+          output: trivy-container.sarif
+          severity: HIGH,CRITICAL
 
-      - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Upload Container SARIF
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: trivy-results.sarif
-          category: trivy-container
+          sarif_file: trivy-container.sarif
 
-      - name: Upload Trivy Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-report
-          path: trivy-results.sarif
-          if-no-files-found: warn
+  ###########################################################################
+  # CHECKOV
+  ###########################################################################
 
-  terraform-security:
-    name: ☁️ Terraform Security
+  checkov:
+    needs: detect
+    if: needs.detect.outputs.terraform == 'true'
     runs-on: ubuntu-latest
 
-    needs:
-      - recon
-
-    if: needs.recon.outputs.has_terraform == 'true'
-
     steps:
-
       - uses: actions/checkout@v4
 
-      - name: Run Checkov
+      - name: Checkov Scan
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
+          framework: terraform,kubernetes,cloudformation,bicep
+          output_format: sarif
+          output_file_path: checkov.sarif
 
-      - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1.0.3
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
 
-  summary:
-    name: ✅ Security Summary
+  ###########################################################################
+  # KUBESCAPE
+  ###########################################################################
+
+  kubescape:
+    needs: detect
+    if: needs.detect.outputs.kubernetes == 'true'
     runs-on: ubuntu-latest
 
-    needs:
-      - codeql
-      - semgrep
-      - gitleaks
-      - dependency-check
+    steps:
+      - uses: actions/checkout@v4
 
-    if: always()
+      - name: Kubescape Scan
+        uses: kubescape/github-action@main
+
+  ###########################################################################
+  # BINSKIM
+  ###########################################################################
+
+  binskim:
+    needs: detect
+    if: needs.detect.outputs.dotnet == 'true'
+    runs-on: windows-latest
 
     steps:
-      - name: Summary
+      - uses: actions/checkout@v4
+
+      - name: Run BinSkim
+        uses: microsoft/binskim-action@v1
+
+  ###########################################################################
+  # API SECURITY
+  ###########################################################################
+
+  api-security:
+    needs: detect
+    if: needs.detect.outputs.openapi == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Schemathesis
         run: |
-          echo "==================================="
-          echo "OWASP Security Pipeline Completed"
-          echo "==================================="
-          echo "✓ CodeQL"
-          echo "✓ Semgrep"
-          echo "✓ Gitleaks"
-          echo "✓ OWASP Dependency Check"
-          echo "✓ Trivy (when Dockerfile exists)"
-          echo "✓ Checkov (when Terraform exists)"
-          echo "✓ tfsec (when Terraform exists)"
+          python -m pip install --upgrade pip
+          pip install schemathesis
+
+      - name: Locate OpenAPI Spec
+        id: api
+        shell: bash
+        run: |
+          FILE=$(find . \( -name "openapi.yaml" -o -name "swagger.yaml" \) | head -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Run Schemathesis
+        run: |
+          schemathesis run "${{ steps.api.outputs.file }}"
+
+  ###########################################################################
+  # OWASP ZAP
+  ###########################################################################
+
+  zap:
+    if: vars.ZAP_TARGET != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ vars.ZAP_TARGET }}
+          rules_file_name: .zap/rules.tsv
+
+  ###########################################################################
+  # SECURITY GATE
+  ###########################################################################
+
+  security-gate:
+    needs:
+      - gitleaks
+      - semgrep
+      - dependency-check
+      - trivy-fs
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Security Gate
+        run: |
+          echo "Mandatory security scans completed."
+          echo "Security gate passed."

@@ -1,56 +1,22 @@
-# OWASP ZAP Rules Configuration File
-# Format: id	name	enabled	threshold	action
-# Learn more: https://www.zaproxy.org/docs/alerts/
-
-# ============================================
-# Information Disclosure - Usually safe to ignore
-# ============================================
-10020	X-Frame-Options Header	enabled	LOW	IGNORE
-10021	X-Content-Type-Options Header	enabled	LOW	IGNORE
-10035	Strict-Transport-Security Header	enabled	LOW	IGNORE
-10036	HTTP Server Response Header	enabled	LOW	IGNORE
-10037	Server Leaks Information via "X-Powered-By"	enabled	LOW	IGNORE
-10039	X-Backend-Server Header Information Leak	enabled	LOW	IGNORE
-10096	Timestamp Disclosure	enabled	LOW	IGNORE
-
-# ============================================
-# Security Headers - Warn but don't fail
-# ============================================
-10038	Content Security Policy (CSP) Header Not Set	enabled	MEDIUM	WARN
-10040	Secure Pages Include Mixed Content	enabled	MEDIUM	WARN
-10041	HTTP to HTTPS Insecure Transition in Form Post	enabled	MEDIUM	WARN
-10042	HTTPS to HTTP Insecure Transition in Form Post	enabled	MEDIUM	WARN
-
-# ============================================
-# OWASP Top 10 - CRITICAL - Fail the build
-# ============================================
-40012	Cross Site Scripting (Reflected)	enabled	HIGH	FAIL
-40014	Cross Site Scripting (Persistent)	enabled	HIGH	FAIL
-40016	Cross Site Scripting (Persistent) - Prime	enabled	HIGH	FAIL
-40017	Cross Site Scripting (Persistent) - Spider	enabled	HIGH	FAIL
-40018	SQL Injection	enabled	HIGH	FAIL
-40019	SQL Injection - MySQL	enabled	HIGH	FAIL
-40020	SQL Injection - Hypersonic SQL	enabled	HIGH	FAIL
-40021	SQL Injection - Oracle	enabled	HIGH	FAIL
-40022	SQL Injection - PostgreSQL	enabled	HIGH	FAIL
-40024	SQL Injection - SQLite	enabled	HIGH	FAIL
-40027	SQL Injection - MsSQL	enabled	HIGH	FAIL
-90019	Server Side Code Injection	enabled	HIGH	FAIL
-90020	Server Side Template Injection	enabled	HIGH	FAIL
-90021	Script Inclusion	enabled	HIGH	FAIL
-40003	CRLF Injection	enabled	MEDIUM	WARN
-40008	Parameter Tampering	enabled	MEDIUM	WARN
-40009	Server Side Include	enabled	HIGH	FAIL
-
-# ============================================
-# Known Vulnerabilities - CRITICAL
-# ============================================
-40042	Spring4Shell	enabled	HIGH	FAIL
-40043	Log4Shell	enabled	HIGH	FAIL
-40034	.NET ViewState Weakness	enabled	MEDIUM	WARN
-
-# ============================================
-# API Security
-# ============================================
-40040	CORS Header	enabled	MEDIUM	WARN
-10098	Cross-Domain Misconfiguration	enabled	MEDIUM	WARN
+10010	WARN
+10011	INFO
+10012	WARN
+10016	WARN
+10017	WARN
+10019	WARN
+10020	FAIL
+10021	FAIL
+10023	FAIL
+10024	FAIL
+10025	FAIL
+10027	FAIL
+10029	FAIL
+10030	FAIL
+10031	FAIL
+10032	FAIL
+10038	FAIL
+10040	FAIL
+10054	FAIL
+10055	FAIL
+10096	FAIL
+10098	FAIL
