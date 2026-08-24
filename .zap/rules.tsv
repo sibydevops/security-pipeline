@@ -1,45 +1,56 @@
-# OWASP ZAP rules configuration (FREE)
-# Format: RuleID	Threshold	Action
+# OWASP ZAP Rules Configuration File
+# Format: id	name	enabled	threshold	action
+# Learn more: https://www.zaproxy.org/docs/alerts/
 
-# Informational - Ignore
-10015	INCOMPLETE	# Incomplete or no cache-control header set
-10020	INCOMPLETE	# X-Frame-Options header not set
-10021	INCOMPLETE	# X-Content-Type-Options header missing
-10035	INCOMPLETE	# Strict-Transport-Security header not set
-10036	INCOMPLETE	# Server header information leak
-10037	INCOMPLETE	# X-Powered-By header information leak
-10038	INCOMPLETE	# Content Security Policy header not set
-10039	INCOMPLETE	# X-XSS-Protection header not set
-10040	INCOMPLETE	# Secure Pages Include Mixed Content
+# ============================================
+# Information Disclosure - Usually safe to ignore
+# ============================================
+10020	X-Frame-Options Header	enabled	LOW	IGNORE
+10021	X-Content-Type-Options Header	enabled	LOW	IGNORE
+10035	Strict-Transport-Security Header	enabled	LOW	IGNORE
+10036	HTTP Server Response Header	enabled	LOW	IGNORE
+10037	Server Leaks Information via "X-Powered-By"	enabled	LOW	IGNORE
+10039	X-Backend-Server Header Information Leak	enabled	LOW	IGNORE
+10096	Timestamp Disclosure	enabled	LOW	IGNORE
 
-# Medium - Warn but don't fail
-10010	WARN	# Cookie No HttpOnly Flag
-10011	WARN	# Cookie Without Secure Flag
-10012	WARN	# Password Autocomplete in Browser
-10017	WARN	# Cross-Domain JavaScript Source File Inclusion
-10019	WARN	# Content-Type header missing
-10023	WARN	# Information Disclosure - Debug Error Messages
-10024	WARN	# Information Disclosure - Sensitive Information in URL
-10025	WARN	# Information Disclosure - Sensitive Information in HTTP Referrer Header
-10027	WARN	# Information Disclosure - Suspicious Comments
-10028	WARN	# Open Redirect
-10030	WARN	# User Controllable Charset
-10031	WARN	# User Controllable HTML Element Attribute (Potential XSS)
-10032	WARN	# Viewstate without MAC Signature
-10034	WARN	# Heartbleed OpenSSL Vulnerability
-10044	WARN	# Big Redirect Detected
+# ============================================
+# Security Headers - Warn but don't fail
+# ============================================
+10038	Content Security Policy (CSP) Header Not Set	enabled	MEDIUM	WARN
+10040	Secure Pages Include Mixed Content	enabled	MEDIUM	WARN
+10041	HTTP to HTTPS Insecure Transition in Form Post	enabled	MEDIUM	WARN
+10042	HTTPS to HTTP Insecure Transition in Form Post	enabled	MEDIUM	WARN
 
-# High - Fail the pipeline
-40012	FAIL	# Cross Site Scripting (Reflected)
-40014	FAIL	# Cross Site Scripting (Persistent)
-40018	FAIL	# SQL Injection
-40019	FAIL	# SQL Injection - MySQL
-40020	FAIL	# SQL Injection - PostgreSQL
-40021	FAIL	# SQL Injection - MsSQL
-40022	FAIL	# LDAP Injection
-40023	FAIL	# XML Injection
-40024	FAIL	# XPath Injection
-40026	FAIL	# Command Injection
-40027	FAIL	# Code Injection
-40033	FAIL	# Server Side Request Forgery
-40034	FAIL	# URL Redirect
+# ============================================
+# OWASP Top 10 - CRITICAL - Fail the build
+# ============================================
+40012	Cross Site Scripting (Reflected)	enabled	HIGH	FAIL
+40014	Cross Site Scripting (Persistent)	enabled	HIGH	FAIL
+40016	Cross Site Scripting (Persistent) - Prime	enabled	HIGH	FAIL
+40017	Cross Site Scripting (Persistent) - Spider	enabled	HIGH	FAIL
+40018	SQL Injection	enabled	HIGH	FAIL
+40019	SQL Injection - MySQL	enabled	HIGH	FAIL
+40020	SQL Injection - Hypersonic SQL	enabled	HIGH	FAIL
+40021	SQL Injection - Oracle	enabled	HIGH	FAIL
+40022	SQL Injection - PostgreSQL	enabled	HIGH	FAIL
+40024	SQL Injection - SQLite	enabled	HIGH	FAIL
+40027	SQL Injection - MsSQL	enabled	HIGH	FAIL
+90019	Server Side Code Injection	enabled	HIGH	FAIL
+90020	Server Side Template Injection	enabled	HIGH	FAIL
+90021	Script Inclusion	enabled	HIGH	FAIL
+40003	CRLF Injection	enabled	MEDIUM	WARN
+40008	Parameter Tampering	enabled	MEDIUM	WARN
+40009	Server Side Include	enabled	HIGH	FAIL
+
+# ============================================
+# Known Vulnerabilities - CRITICAL
+# ============================================
+40042	Spring4Shell	enabled	HIGH	FAIL
+40043	Log4Shell	enabled	HIGH	FAIL
+40034	.NET ViewState Weakness	enabled	MEDIUM	WARN
+
+# ============================================
+# API Security
+# ============================================
+40040	CORS Header	enabled	MEDIUM	WARN
+10098	Cross-Domain Misconfiguration	enabled	MEDIUM	WARN

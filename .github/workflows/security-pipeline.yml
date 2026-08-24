@@ -1,0 +1,150 @@
+name: OWASP Security Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  security-events: write
+  actions: read
+  contents: read
+
+env:
+  # REPLACE THIS with your actual staging URL
+  STAGING_URL: 'https://staging.yourapp.com'
+
+jobs:
+  # ============================================
+  # JOB 1: SAST - Static Application Security Testing
+  # ============================================
+  sast-scanning:
+    name: 🔍 SAST (Semgrep OWASP Top 10)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep with OWASP Top 10 rules
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: |
+            p/security-audit
+            p/owasp-top-ten
+          audit_on: true
+          generate_suppression: true
+
+      - name: Upload Semgrep Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep-results.json
+          retention-days: 30
+
+  # ============================================
+  # JOB 2: SCA - Software Composition Analysis
+  # ============================================
+  dependency-check:
+    name: 📦 OWASP Dependency-Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        id: depcheck
+        with:
+          project: '${{ github.repository }}'
+          path: '.'
+          format: 'HTML'
+          failOnCVSS: '8'
+          autoUpdate: true
+          nvdApiKey: '${{ secrets.NVD_API_KEY }}'
+
+      - name: Upload Dependency-Check Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: '${{ steps.depcheck.outputs.reportPath }}'
+          retention-days: 30
+
+  # ============================================
+  # JOB 3: DAST - Dynamic Application Security Testing (PR)
+  # ============================================
+  zap-baseline-scan:
+    name: 🛡️ OWASP ZAP Baseline (PR)
+    runs-on: ubuntu-latest
+    needs: [sast-scanning, dependency-check]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Wait for staging environment
+        run: |
+          echo "Waiting for staging to be accessible..."
+          for i in {1..5}; do
+            if curl -s -o /dev/null -w "%{http_code}" ${{ env.STAGING_URL }} | grep -q "200\|301\|302\|401\|403"; then
+              echo "✅ Staging is accessible"
+              exit 0
+            fi
+            echo "Attempt $i: Staging not ready, waiting 10s..."
+            sleep 10
+          done
+          echo "⚠️ Staging not accessible, continuing anyway"
+          exit 0
+
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: '${{ env.STAGING_URL }}'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+          fail_action: true
+
+      - name: Upload ZAP Baseline Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: report_html.html
+          retention-days: 30
+
+  # ============================================
+  # JOB 4: DAST - Full ZAP Scan (Main branch)
+  # ============================================
+  zap-full-scan:
+    name: 🛡️ OWASP ZAP Full Scan (Main)
+    runs-on: ubuntu-latest
+    needs: [sast-scanning, dependency-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.14.0
+        with:
+          target: '${{ env.STAGING_URL }}'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+          fail_action: true
+          allow_issue_writing: true
+          token: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Upload ZAP Full Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-full-report
+          path: report_html.html
+          retention-days: 30
