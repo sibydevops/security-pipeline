@@ -1,25 +1,19 @@
-name: Security Quick Scan
+name: OWASP ZAP DAST
 
 on:
-  pull_request:
-
-permissions:
-  contents: read
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Application URL"
+        required: true
+        type: string
 
 jobs:
-
-  semgrep:
+  zap:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: semgrep/semgrep-action@v1
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
         with:
-          config: p/owasp-top-ten
-
-  dependency-review:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/dependency-review-action@v4
+          target: ${{ inputs.target }}

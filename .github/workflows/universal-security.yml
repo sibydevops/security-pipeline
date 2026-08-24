@@ -1,9 +1,13 @@
-name: OWASP Enterprise Security
+name: Enterprise OWASP Security
 
 on:
   push:
     branches:
       - main
+      - master
+      - develop
+
+  pull_request:
 
   workflow_dispatch:
 
@@ -12,145 +16,206 @@ permissions:
 
 jobs:
 
-  ####################################################################
-  # SAST
-  ####################################################################
+  detect:
+    name: Detect Repository Type
+    runs-on: ubuntu-latest
+
+    outputs:
+      docker: ${{ steps.detect.outputs.docker }}
+      terraform: ${{ steps.detect.outputs.terraform }}
+      kubernetes: ${{ steps.detect.outputs.kubernetes }}
+      openapi: ${{ steps.detect.outputs.openapi }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect Technologies
+        id: detect
+        shell: bash
+        run: |
+          echo "docker=false" >> $GITHUB_OUTPUT
+          echo "terraform=false" >> $GITHUB_OUTPUT
+          echo "kubernetes=false" >> $GITHUB_OUTPUT
+          echo "openapi=false" >> $GITHUB_OUTPUT
+
+          find . -name Dockerfile | grep -q . && echo "docker=true" >> $GITHUB_OUTPUT
+
+          find . -name "*.tf" | grep -q . && echo "terraform=true" >> $GITHUB_OUTPUT
+
+          find . \( -name "*.yaml" -o -name "*.yml" \) | grep -q . && echo "kubernetes=true" >> $GITHUB_OUTPUT
+
+          find . \( -name "openapi.yaml" -o -name "swagger.yaml" \) | grep -q . && echo "openapi=true" >> $GITHUB_OUTPUT
 
   semgrep:
-
+    name: OWASP SAST
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: semgrep/semgrep-action@v1
-
+      - name: Semgrep
+        uses: semgrep/semgrep-action@v1
         with:
           config: |
             p/owasp-top-ten
             p/security-audit
+            p/secrets
 
-  ####################################################################
-  # DEPENDENCY CHECK
-  ####################################################################
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/dependency-review-action@v4
 
   dependency-check:
-
+    name: OWASP Dependency Check
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
-      - name: OWASP Dependency Check
+      - name: Create Reports Folder
+        run: mkdir -p reports
 
-        uses: dependency-check/Dependency-Check_Action@main
+      - name: Run OWASP Dependency Check
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            owasp/dependency-check:latest \
+            --scan /src \
+            --project "${{ github.repository }}" \
+            --format HTML \
+            --out /src/reports
 
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
         with:
-          project: ${{ github.repository }}
-          path: .
+          name: dependency-check-report
+          path: reports/
 
-  ####################################################################
-  # TRIVY FILE SYSTEM
-  ####################################################################
-
-  trivy:
-
+  trivy-filesystem:
+    name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
-      - uses: aquasecurity/trivy-action@master
-
+      - name: Trivy Filesystem
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
           severity: HIGH,CRITICAL
+          exit-code: 1
 
-  ####################################################################
-  # CHECKOV
-  ####################################################################
-
-  checkov:
-
+  trivy-container:
+    name: Trivy Container Scan
+    needs: detect
+    if: needs.detect.outputs.docker == 'true'
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
-      - uses: bridgecrewio/checkov-action@master
+      - name: Build Container
+        run: |
+          docker build -t app:${{ github.sha }} .
 
+      - name: Trivy Container
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: app:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+  checkov:
+    name: Infrastructure Security
+    needs: detect
+    if: |
+      needs.detect.outputs.terraform == 'true' ||
+      needs.detect.outputs.kubernetes == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov Scan
+        uses: bridgecrewio/checkov-action@master
         with:
           directory: .
           framework: terraform,kubernetes,bicep,cloudformation
+          quiet: true
 
-  ####################################################################
-  # API SECURITY
-  ####################################################################
-
-  schemathesis:
-
+  kubescape:
+    name: Kubernetes Security
+    needs: detect
+    if: needs.detect.outputs.kubernetes == 'true'
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
-      - name: Install
-
+      - name: Scan Kubernetes Manifests
         run: |
-          pip install schemathesis
+          mkdir -p manifests
 
-      - name: Run API Tests
+          find . \
+            -path "./node_modules" -prune -o \
+            -path "./.git" -prune -o \
+            \( -name "*.yaml" -o -name "*.yml" \) \
+            -exec cp {} manifests/ \; || true
 
-        run: |
-          OPENAPI_FILE=$(find . \
-            \( -name "openapi.yaml" \
-            -o -name "swagger.yaml" \) \
-            | head -1)
-
-          if [ -n "$OPENAPI_FILE" ]; then
-            schemathesis run "$OPENAPI_FILE"
+          if [ "$(ls -A manifests 2>/dev/null)" ]; then
+            docker run --rm \
+              -v "$PWD/manifests:/work" \
+              kubescape/kubescape:latest \
+              scan framework nsa /work
+          else
+            echo "No Kubernetes manifests found."
           fi
 
-  ####################################################################
-  # DAST
-  ####################################################################
-
-  zap:
-
-    if: vars.ZAP_TARGET != ''
-
+  api-security:
+    name: OWASP API Security
+    needs: detect
+    if: needs.detect.outputs.openapi == 'true'
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v4
 
-      - name: OWASP ZAP
+      - name: Install Schemathesis
+        run: |
+          python -m pip install --upgrade pip
+          pip install schemathesis
 
-        uses: zaproxy/action-baseline@v0.12.0
+      - name: Detect OpenAPI Spec
+        id: api
+        shell: bash
+        run: |
+          FILE=$(find . \
+            \( -name "openapi.yaml" -o -name "swagger.yaml" \) \
+            | head -1)
 
-        with:
-          target: ${{ vars.ZAP_TARGET }}
+          echo "file=$FILE" >> $GITHUB_OUTPUT
 
-  ####################################################################
-  # SECURITY GATE
-  ####################################################################
+      - name: Run Schemathesis
+        run: |
+          schemathesis run "${{ steps.api.outputs.file }}"
 
   security-gate:
-
+    name: Security Gate
     needs:
       - semgrep
       - dependency-check
-      - trivy
+      - trivy-filesystem
 
     runs-on: ubuntu-latest
 
     steps:
-
-      - run: |
-          echo "OWASP security scans completed"
+      - name: Validate Results
+        run: |
+          echo "Mandatory OWASP security controls completed."
+          echo "Security gate passed."
