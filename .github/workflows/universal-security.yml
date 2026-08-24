@@ -1,0 +1,430 @@
+name: 🔒 Universal Security Scan
+
+on:
+  # Trigger on EVERY pull request
+  pull_request:
+    branches: ['**']
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'README*'
+  
+  # Trigger on EVERY push to main branches
+  push:
+    branches: [main, master, develop]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
+      - 'README*'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+permissions:
+  security-events: write
+  actions: read
+  contents: read
+  issues: write
+
+env:
+  # Security thresholds
+  FAIL_CVSS_THRESHOLD: '7.0'
+  JAVA_VERSION: '17'
+
+jobs:
+  # ============================================
+  # DETECT APPLICATION TYPE
+  # ============================================
+  detect-app-type:
+    name: 🔍 Detect Application Type
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      is_web: ${{ steps.detect.outputs.is_web }}
+      is_api: ${{ steps.detect.outputs.is_api }}
+      is_desktop: ${{ steps.detect.outputs.is_desktop }}
+      is_cloud_native: ${{ steps.detect.outputs.is_cloud_native }}
+      is_mobile: ${{ steps.detect.outputs.is_mobile }}
+      is_infra: ${{ steps.detect.outputs.is_infra }}
+      has_docker: ${{ steps.detect.outputs.has_docker }}
+      has_terraform: ${{ steps.detect.outputs.has_terraform }}
+      has_kubernetes: ${{ steps.detect.outputs.has_kubernetes }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Detect Application Type
+        id: detect
+        run: |
+          echo "🔍 Detecting application type..."
+          
+          # Web Application Detection
+          IS_WEB=false
+          if [ -f "package.json" ] || [ -f "pom.xml" ] || [ -f "Gemfile" ] || [ -f "requirements.txt" ] || [ -f "composer.json" ]; then
+            IS_WEB=true
+            echo "✅ Detected: Web Application"
+          fi
+          echo "is_web=$IS_WEB" >> $GITHUB_OUTPUT
+          
+          # API Detection
+          IS_API=false
+          if [ -f "openapi.json" ] || [ -f "openapi.yaml" ] || [ -f "swagger.json" ] || [ -d "api" ] || [ -d "apis" ]; then
+            IS_API=true
+            echo "✅ Detected: API Service"
+          fi
+          echo "is_api=$IS_API" >> $GITHUB_OUTPUT
+          
+          # Desktop Application Detection
+          IS_DESKTOP=false
+          if ls *.csproj *.sln 2>/dev/null || [ -f "setup.py" ] || [ -f "Makefile" ]; then
+            IS_DESKTOP=true
+            echo "✅ Detected: Desktop Application"
+          fi
+          echo "is_desktop=$IS_DESKTOP" >> $GITHUB_OUTPUT
+          
+          # Cloud-Native Detection
+          IS_CLOUD=false
+          if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ] || [ -f "Chart.yaml" ]; then
+            IS_CLOUD=true
+            echo "✅ Detected: Cloud-Native Application"
+          fi
+          echo "is_cloud_native=$IS_CLOUD" >> $GITHUB_OUTPUT
+          
+          # Mobile Detection
+          IS_MOBILE=false
+          if [ -f "pubspec.yaml" ] || [ -f "build.gradle" ] || [ -f "Podfile" ] || [ -d "android" ] || [ -d "ios" ]; then
+            IS_MOBILE=true
+            echo "✅ Detected: Mobile Application"
+          fi
+          echo "is_mobile=$IS_MOBILE" >> $GITHUB_OUTPUT
+          
+          # Infrastructure Detection
+          IS_INFRA=false
+          if ls *.tf *.tf.json 2>/dev/null || [ -d "terraform" ]; then
+            IS_INFRA=true
+            echo "✅ Detected: Infrastructure"
+          fi
+          echo "is_infra=$IS_INFRA" >> $GITHUB_OUTPUT
+          
+          # Docker Detection
+          HAS_DOCKER=false
+          if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ]; then
+            HAS_DOCKER=true
+          fi
+          echo "has_docker=$HAS_DOCKER" >> $GITHUB_OUTPUT
+          
+          # Terraform Detection
+          HAS_TERRAFORM=false
+          if ls *.tf *.tf.json 2>/dev/null; then
+            HAS_TERRAFORM=true
+          fi
+          echo "has_terraform=$HAS_TERRAFORM" >> $GITHUB_OUTPUT
+          
+          # Kubernetes Detection
+          HAS_K8S=false
+          if ls *.yaml *.yml 2>/dev/null; then
+            if grep -q "apiVersion:" *.yaml *.yml 2>/dev/null || grep -q "kind:" *.yaml *.yml 2>/dev/null; then
+              HAS_K8S=true
+            fi
+          fi
+          echo "has_kubernetes=$HAS_K8S" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "📊 Detection Summary:"
+          echo "  Web: $IS_WEB"
+          echo "  API: $IS_API"
+          echo "  Desktop: $IS_DESKTOP"
+          echo "  Cloud-Native: $IS_CLOUD"
+          echo "  Mobile: $IS_MOBILE"
+          echo "  Infrastructure: $IS_INFRA"
+          echo "  Docker: $HAS_DOCKER"
+          echo "  Terraform: $HAS_TERRAFORM"
+          echo "  Kubernetes: $HAS_K8S"
+
+  # ============================================
+  # SAST - ALWAYS RUNS (Static Analysis)
+  # ============================================
+  sast-scanning:
+    name: 🔍 SAST (Semgrep + CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [detect-app-type]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      
+      # Initialize CodeQL (auto-detects languages)
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript,python,java,csharp,go,ruby,php
+          queries: security-extended,security-and-quality
+      
+      # Run Semgrep (OWASP Top 10)
+      - name: Run Semgrep OWASP Top 10
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: |
+            p/security-audit
+            p/owasp-top-ten
+            p/nodejs
+            p/python
+            p/java
+            p/csharp
+            p/go
+            p/security-audit.secrets
+          audit_on: true
+          generate_suppression: true
+      
+      # Perform CodeQL Analysis
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript,python,java,csharp,go,ruby,php"
+      
+      # Upload CodeQL results to GitHub Security tab
+      - name: Upload CodeQL Results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: codeql-analysis
+      
+      # Upload Semgrep report
+      - name: Upload Semgrep Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report-${{ github.run_id }}
+          path: |
+            semgrep-results.json
+            semgrep-results.sarif
+          retention-days: 30
+
+  # ============================================
+  # SCA - ALWAYS RUNS (Dependency Scanning)
+  # ============================================
+  dependency-scanning:
+    name: 📦 SCA (Dependency-Check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [detect-app-type]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      # OWASP Dependency-Check (scans all dependency types)
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        id: depcheck
+        with:
+          project: '${{ github.repository }}'
+          path: '.'
+          format: 'HTML'
+          failOnCVSS: '${{ env.FAIL_CVSS_THRESHOLD }}'
+          autoUpdate: true
+          nvdApiKey: '${{ secrets.NVD_API_KEY }}'
+          args: >-
+            --enableRetired
+            --failBuildOnCVSS ${{ env.FAIL_CVSS_THRESHOLD }}
+            --nvdValidForHours 12
+            --maxRetries 3
+      
+      # Upload report
+      - name: Upload Dependency-Check Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report-${{ github.run_id }}
+          path: '${{ steps.depcheck.outputs.reportPath }}'
+          retention-days: 30
+
+  # ============================================
+  # CONTAINER SECURITY - IF DOCKER DETECTED
+  # ============================================
+  container-security:
+    name: 🐳 Container Security (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [detect-app-type]
+    if: needs.detect-app-type.outputs.has_docker == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Build Docker image (if Dockerfile exists)
+      - name: Build Docker Image
+        if: hashFiles('Dockerfile') != ''
+        run: |
+          docker build -t ${{ github.repository }}:${{ github.sha }} .
+      
+      # Scan with Trivy
+      - name: Run Trivy Image Scanner
+        if: hashFiles('Dockerfile') != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          image-ref: '${{ github.repository }}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          vuln-type: 'os,library'
+      
+      # Scan Dockerfile
+      - name: Run Trivy FS Scanner
+        if: hashFiles('Dockerfile') != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+      
+      # Upload results
+      - name: Upload Trivy Image Report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-image-results.sarif'
+          category: 'trivy-image'
+      
+      - name: Upload Trivy FS Report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+          category: 'trivy-fs'
+
+  # ============================================
+  # INFRASTRUCTURE SECURITY - IF TERRAFORM DETECTED
+  # ============================================
+  infrastructure-security:
+    name: 🏗️ IaC Security (Checkov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [detect-app-type]
+    if: needs.detect-app-type.outputs.has_terraform == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Run Checkov
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: '.'
+          framework: terraform
+          output_format: 'sarif'
+          output_file_path: 'checkov-results.sarif'
+          soft_fail: true
+      
+      # Upload results
+      - name: Upload Checkov Report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'checkov-results.sarif'
+          category: 'checkov'
+
+  # ============================================
+  # KUBERNETES SECURITY - IF K8S DETECTED
+  # ============================================
+  kubernetes-security:
+    name: ☸️ Kubernetes Security (Kubesec)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [detect-app-type]
+    if: needs.detect-app-type.outputs.has_kubernetes == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Run Kubesec
+      - name: Run Kubesec
+        uses: controlplane-tech/kubesec-action@v1
+        with:
+          path: '.'
+          output: 'kubesec-results.json'
+      
+      # Upload results
+      - name: Upload Kubesec Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-security-${{ github.run_id }}
+          path: 'kubesec-results.json'
+          retention-days: 30
+
+  # ============================================
+  # SECURITY SUMMARY
+  # ============================================
+  security-summary:
+    name: 📊 Security Summary
+    runs-on: ubuntu-latest
+    needs: [detect-app-type, sast-scanning, dependency-scanning, container-security, infrastructure-security, kubernetes-security]
+    if: always()
+    
+    steps:
+      - name: Generate Security Summary
+        run: |
+          echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show detected application type
+          echo "### Detected Application Type" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Type | Detected |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Web | ${{ needs.detect-app-type.outputs.is_web }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API | ${{ needs.detect-app-type.outputs.is_api }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Desktop | ${{ needs.detect-app-type.outputs.is_desktop }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cloud-Native | ${{ needs.detect-app-type.outputs.is_cloud_native }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Mobile | ${{ needs.detect-app-type.outputs.is_mobile }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Infrastructure | ${{ needs.detect-app-type.outputs.is_infra }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker | ${{ needs.detect-app-type.outputs.has_docker }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform | ${{ needs.detect-app-type.outputs.has_terraform }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Kubernetes | ${{ needs.detect-app-type.outputs.has_kubernetes }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show scan results
+          echo "### Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan | Status | Duration |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST (Semgrep + CodeQL) | ${{ needs.sast-scanning.result }} | ~3 min |" >> $GITHUB_STEP_SUMMARY
+          echo "| SCA (Dependency-Check) | ${{ needs.dependency-scanning.result }} | ~3 min |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.detect-app-type.outputs.has_docker }}" == "true" ]; then
+            echo "| Container (Trivy) | ${{ needs.container-security.result }} | ~2 min |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.detect-app-type.outputs.has_terraform }}" == "true" ]; then
+            echo "| IaC (Checkov) | ${{ needs.infrastructure-security.result }} | ~2 min |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.detect-app-type.outputs.has_kubernetes }}" == "true" ]; then
+            echo "| Kubernetes (Kubesec) | ${{ needs.kubernetes-security.result }} | ~2 min |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Duration**: ~5-8 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Cost**: **\$0** (100% Free)" >> $GITHUB_STEP_SUMMARY
