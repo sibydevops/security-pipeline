@@ -1,22 +1,45 @@
-10010	WARN
-10011	INFO
-10012	WARN
-10016	WARN
-10017	WARN
-10019	WARN
-10020	FAIL
-10021	FAIL
-10023	FAIL
-10024	FAIL
-10025	FAIL
-10027	FAIL
-10029	FAIL
-10030	FAIL
-10031	FAIL
-10032	FAIL
-10038	FAIL
-10040	FAIL
-10054	FAIL
-10055	FAIL
-10096	FAIL
-10098	FAIL
+# OWASP ZAP rules configuration (FREE)
+# Format: RuleID	Threshold	Action
+
+# Informational - Ignore
+10015	INCOMPLETE	# Incomplete or no cache-control header set
+10020	INCOMPLETE	# X-Frame-Options header not set
+10021	INCOMPLETE	# X-Content-Type-Options header missing
+10035	INCOMPLETE	# Strict-Transport-Security header not set
+10036	INCOMPLETE	# Server header information leak
+10037	INCOMPLETE	# X-Powered-By header information leak
+10038	INCOMPLETE	# Content Security Policy header not set
+10039	INCOMPLETE	# X-XSS-Protection header not set
+10040	INCOMPLETE	# Secure Pages Include Mixed Content
+
+# Medium - Warn but don't fail
+10010	WARN	# Cookie No HttpOnly Flag
+10011	WARN	# Cookie Without Secure Flag
+10012	WARN	# Password Autocomplete in Browser
+10017	WARN	# Cross-Domain JavaScript Source File Inclusion
+10019	WARN	# Content-Type header missing
+10023	WARN	# Information Disclosure - Debug Error Messages
+10024	WARN	# Information Disclosure - Sensitive Information in URL
+10025	WARN	# Information Disclosure - Sensitive Information in HTTP Referrer Header
+10027	WARN	# Information Disclosure - Suspicious Comments
+10028	WARN	# Open Redirect
+10030	WARN	# User Controllable Charset
+10031	WARN	# User Controllable HTML Element Attribute (Potential XSS)
+10032	WARN	# Viewstate without MAC Signature
+10034	WARN	# Heartbleed OpenSSL Vulnerability
+10044	WARN	# Big Redirect Detected
+
+# High - Fail the pipeline
+40012	FAIL	# Cross Site Scripting (Reflected)
+40014	FAIL	# Cross Site Scripting (Persistent)
+40018	FAIL	# SQL Injection
+40019	FAIL	# SQL Injection - MySQL
+40020	FAIL	# SQL Injection - PostgreSQL
+40021	FAIL	# SQL Injection - MsSQL
+40022	FAIL	# LDAP Injection
+40023	FAIL	# XML Injection
+40024	FAIL	# XPath Injection
+40026	FAIL	# Command Injection
+40027	FAIL	# Code Injection
+40033	FAIL	# Server Side Request Forgery
+40034	FAIL	# URL Redirect

@@ -1,0 +1,20 @@
+name: Organization OWASP Security
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  owasp:
+    uses: ./.github/workflows/common-owasp-security.yml
+    with:
+      # Replace auto with an explicit profile when the repository is onboarded.
+      application-type: auto
+      target-url: ${{ vars.OWASP_TARGET_URL }}
+      openapi-spec: ${{ vars.OWASP_OPENAPI_SPEC }}
+      run-zap: true
