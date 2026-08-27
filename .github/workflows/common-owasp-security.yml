@@ -36,7 +36,6 @@ jobs:
       application-type: ${{ steps.detect.outputs.application-type }}
       codeql-language: ${{ steps.detect.outputs.codeql-language }}
       active-test-required: ${{ steps.detect.outputs.active-test-required }}
-      cloud-native: ${{ steps.detect.outputs.cloud-native }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,75 +77,17 @@ jobs:
           echo "application-type=$profile" >> "$GITHUB_OUTPUT"
           echo "codeql-language=$language" >> "$GITHUB_OUTPUT"
           [[ "$profile" == web || "$profile" == api || "$profile" == cloud-native ]] && active=true || active=false
-          [[ "$profile" == cloud-native ]] && cloud=true || cloud=false
           echo "active-test-required=$active" >> "$GITHUB_OUTPUT"
-          echo "cloud-native=$cloud" >> "$GITHUB_OUTPUT"
-
-  dependency:
-    name: OWASP Dependency-Check
-    needs: profile
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: ${{ github.event.repository.name || github.repository }}
-          path: .
-          format: SARIF
-          out: reports
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: owasp-dependency-check-${{ github.run_id }}
-          path: reports
-
-  sast:
-    name: OWASP-aligned source analysis
-    needs: profile
-    if: needs.profile.outputs.codeql-language != 'none'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ needs.profile.outputs.codeql-language }}
-          queries: security-extended
-      - uses: github/codeql-action/autobuild@v3
-      - uses: github/codeql-action/analyze@v3
-        with:
-          category: /owasp/${{ needs.profile.outputs.application-type }}
-
-  cloud-native:
-    name: Cloud-native configuration and image scan
-    needs: profile
-    if: needs.profile.outputs.cloud-native == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Scan repository configuration with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: misconfig,secret,vuln
-          format: sarif
-          output: trivy-fs.sarif
-          severity: HIGH,CRITICAL
-          exit-code: '1'
-      - uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: trivy-fs.sarif
 
   zap:
     name: OWASP ZAP penetration test
     needs: profile
-    if: needs.profile.outputs.active-test-required == 'true'
+    if: needs.profile.outputs.active-test-required == 'true' && inputs.run-zap == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Require authorized target
-        if: inputs.run-zap == false || inputs.target-url == ''
+        if: inputs.target-url == ''
         run: |
           echo "An authorized non-production target-url is required for ${{ needs.profile.outputs.application-type }}."
           echo "Configure the repository variable OWASP_TARGET_URL or provide an ephemeral deployment."

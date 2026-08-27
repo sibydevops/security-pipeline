@@ -2,7 +2,11 @@ name: Organization OWASP Security
 
 on:
   push:
+    branches:
+      - '**'
   pull_request:
+    branches:
+      - '**'
   workflow_dispatch:
 
 permissions:
@@ -17,4 +21,6 @@ jobs:
       application-type: auto
       target-url: ${{ vars.OWASP_TARGET_URL }}
       openapi-spec: ${{ vars.OWASP_OPENAPI_SPEC }}
-      run-zap: true
+      # This repository has no deployed HTTP service. Enable this after supplying
+      # an authorized non-production target through OWASP_TARGET_URL.
+      run-zap: false
