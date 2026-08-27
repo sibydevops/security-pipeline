@@ -99,7 +99,7 @@ with:
 
 ## Step 4: Configure OWASP scans
 
-The common workflow runs OWASP Dependency-Check for every repository invocation. It runs CodeQL when a supported source language is detected, Trivy configuration scanning for cloud-native repositories, and OWASP ZAP only for web, API, and cloud-native profiles. For those profiles, an authorized target is mandatory and the workflow fails if no target is supplied. For desktop, mobile, library, and infrastructure profiles, active HTTP testing is recorded as not applicable.
+The common workflow runs CodeQL when a supported source language is detected and OWASP ZAP for every profile. Trivy is not used. An authorized HTTP target or ephemeral application is required for ZAP.
 
 ### Web applications
 

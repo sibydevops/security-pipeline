@@ -95,8 +95,25 @@ jobs:
             printf '| Commit | `%s` |\n' "$GITHUB_SHA"
             printf '| Detected profile | `%s` |\n' "$profile"
             printf '| Source language | `%s` |\n' "$language"
+            echo "| Source scan | CodeQL when a supported language is detected |"
             echo "| Scan | OWASP ZAP penetration test |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  sast:
+    name: CodeQL source code scanning
+    needs: profile
+    if: needs.profile.outputs.codeql-language != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ needs.profile.outputs.codeql-language }}
+          queries: security-extended
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /owasp/${{ needs.profile.outputs.application-type }}
 
   zap:
     name: OWASP ZAP penetration test
