@@ -137,6 +137,16 @@ jobs:
           target: ${{ inputs.target-url }}
           cmd_options: '-a'
           allow_issue_writing: false
+      - name: Upload OWASP ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-zap-reports-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
       - name: Stop ephemeral application
         if: always() && inputs.start-command != ''
         shell: bash

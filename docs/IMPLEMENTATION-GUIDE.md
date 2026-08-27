@@ -10,15 +10,15 @@ The common workflow is:
 .github/workflows/common-owasp-security.yml
 ```
 
-The caller template is:
+The caller template is not an active workflow while it is under `docs/`. Copy it into each application repository as:
 
 ```text
-docs/application-security-caller.yml
+.github/workflows/organization-owasp-security.yml
 ```
 
 ## Important GitHub limitation
 
-A workflow in `security-workflows` cannot receive `push` or `pull_request` events from other repositories. GitHub evaluates those events in the repository containing the workflow file.
+A workflow in `security-pipeline` cannot receive `push` or `pull_request` events from other repositories. GitHub evaluates those events in the repository containing the workflow file.
 
 Therefore, immediate scans for every push and pull request require one of these:
 
@@ -34,7 +34,7 @@ A central reusable workflow is the correct shared implementation, but it is not 
 Keep the common workflow in the central repository and pin its reference to a reviewed release tag instead of `main` for production:
 
 ```text
-sibydevops/security-workflows/.github/workflows/common-owasp-security.yml
+sibydevops/security-pipeline/.github/workflows/common-owasp-security.yml
 ```
 
 Review all third-party actions and pin versions or commit SHAs according to organization supply-chain policy.
