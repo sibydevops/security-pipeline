@@ -87,6 +87,16 @@ jobs:
           echo "application-type=$profile" >> "$GITHUB_OUTPUT"
           echo "codeql-language=$language" >> "$GITHUB_OUTPUT"
           echo "active-test-required=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "## OWASP Security Scan"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Application repository | \\`$GITHUB_REPOSITORY\\` |"
+            echo "| Commit | \\`$GITHUB_SHA\\` |"
+            echo "| Detected profile | \\`$profile\\` |"
+            echo "| Source language | \\`$language\\` |"
+            echo "| Scan | OWASP ZAP penetration test |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   zap:
     name: OWASP ZAP penetration test
