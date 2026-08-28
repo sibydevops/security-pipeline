@@ -19,6 +19,8 @@ jobs:
     uses: sibydevops/security-pipeline/.github/workflows/common-owasp-security.yml@main
     with:
       application-type: auto
+      # No target URL is needed for automatic source scanning on every push.
+      # Set run-zap to true and provide OWASP_TARGET_URL when a staging target exists.
       target-url: ${{ vars.OWASP_TARGET_URL }}
       openapi-spec: ${{ vars.OWASP_OPENAPI_SPEC }}
       run-zap: true

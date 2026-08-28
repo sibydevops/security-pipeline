@@ -99,7 +99,7 @@ with:
 
 ## Step 4: Configure OWASP scans
 
-The common workflow runs CodeQL when a supported source language is detected and OWASP ZAP for every profile. Trivy is not used. An authorized HTTP target or ephemeral application is required for ZAP.
+The common workflow runs CodeQL when a supported source language is detected on every push and pull request. OWASP ZAP is optional: it runs only when an authorized HTTP target or ephemeral application is configured. With no target URL, the source security checks still run and active testing is reported as not applicable.
 
 ### Web applications
 
@@ -118,7 +118,7 @@ with:
   target-url: https://staging.example.test
 ```
 
-Do not use a placeholder target. A web/API/cloud-native scan cannot be marked successful without an authorized non-production target or an approved ephemeral deployment.
+Do not use a placeholder target. Configure `OWASP_TARGET_URL` only for an authorized non-production target, or provide `start-command` and `health-url` for an approved ephemeral deployment.
 
 ### APIs
 
@@ -189,7 +189,7 @@ OWASP ZAP and API testing need a running HTTP target. Use one of:
 - Temporary isolated deployment.
 - Application started on the GitHub runner.
 
-If there is no target, the workflow must report `not applicable`. It must not claim that active penetration testing passed.
+If there is no target, the workflow skips active testing and reports it as `not applicable`. It must not claim that active penetration testing passed.
 
 ## Step 7: Configure GitHub security
 

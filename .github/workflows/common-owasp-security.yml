@@ -19,7 +19,7 @@ on:
         default: ''
         type: string
       run-zap:
-        description: 'Run OWASP ZAP against target-url'
+        description: 'Run OWASP ZAP when a target or ephemeral application is available'
         required: false
         default: true
         type: boolean
@@ -119,7 +119,7 @@ jobs:
   zap:
     name: OWASP ZAP penetration test
     needs: profile
-    if: needs.profile.outputs.active-test-required == 'true' && inputs.run-zap == true
+    if: needs.profile.outputs.active-test-required == 'true' && inputs.run-zap == true && (inputs.target-url != '' || inputs.start-command != '' || inputs.openapi-spec != '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -144,12 +144,6 @@ jobs:
             sleep 2
           done
           cat app.log
-          exit 1
-      - name: Require authorized target
-        if: inputs.target-url == ''
-        run: |
-          echo "An authorized non-production target-url is required for ${{ needs.profile.outputs.application-type }}."
-          echo "Configure the repository variable OWASP_TARGET_URL or provide an ephemeral deployment."
           exit 1
       - name: OWASP ZAP API scan
         if: needs.profile.outputs.application-type == 'api' && inputs.openapi-spec != ''
@@ -182,3 +176,19 @@ jobs:
           if [[ -f app.pid ]]; then
             kill "$(cat app.pid)" 2>/dev/null || true
           fi
+
+  zap-not-applicable:
+    name: OWASP ZAP not applicable
+    needs: profile
+    if: needs.profile.outputs.active-test-required == 'true' && inputs.run-zap == true && inputs.target-url == '' && inputs.start-command == '' && inputs.openapi-spec == ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record active testing status
+        shell: bash
+        run: |
+          echo "No authorized target URL or ephemeral start command was configured."
+          echo "OWASP ZAP active testing is not applicable for this run."
+          {
+            echo "## OWASP ZAP"
+            echo "Active testing: not applicable (no target URL or ephemeral application configured)."
+          } >> "$GITHUB_STEP_SUMMARY"
