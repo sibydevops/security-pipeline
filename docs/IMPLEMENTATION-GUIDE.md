@@ -20,46 +20,14 @@ The caller template is not an active workflow while it is under `docs/`. Copy it
 
 A workflow in `security-pipeline` cannot receive `push` or `pull_request` events from other repositories. GitHub evaluates those events in the repository containing the workflow file.
 
-Therefore, immediate scans for every push and pull request across repositories require one of these:
+Therefore, scans for every push and pull request across repositories require organization-level configuration:
 
-1. Use an organization GitHub App/webhook for central event delivery. This is the required option when repositories cannot be modified.
+1. Enable CodeQL default setup for the repositories that need source scanning.
 2. Use GitHub Enterprise Cloud required workflows/rulesets where available for pull-request enforcement.
-3. Copy the caller template into each application repository.
+3. Copy the caller template into each application repository when custom OWASP checks are required.
 4. Use scheduled polling for delayed scans without repository workflow files.
 
-A central reusable workflow is the shared implementation, but it is not itself an organization-wide event listener. There is no `on:` value that subscribes one workflow to pushes or pull requests in all repositories.
-
-## Central event service
-
-This repository includes a GitHub App webhook receiver at:
-
-```text
-POST /github/webhook
-```
-
-Run the Node service behind an HTTPS endpoint and configure a GitHub App installed on the organization with:
-
-- Repository metadata read access.
-- Contents read access.
-- Actions write access on `security-pipeline`.
-- Contents read access on repositories that will be scanned.
-- Code scanning write access only if results will be uploaded from a repository-local workflow.
-- Webhook subscriptions for `Push` and `Pull request`.
-
-Set these service environment variables:
-
-```text
-GITHUB_APP_ID
-GITHUB_APP_PRIVATE_KEY
-GITHUB_WEBHOOK_SECRET
-CENTRAL_REPOSITORY=sibydevops/security-pipeline
-CENTRAL_WORKFLOW_ID=central-security-dispatch.yml
-CENTRAL_WORKFLOW_REF=main
-```
-
-Store `GITHUB_APP_PRIVATE_KEY` with escaped newlines when supplied as one environment variable. Configure the organization webhook URL to the service URL plus `/github/webhook`. The receiver verifies `X-Hub-Signature-256`, ignores unrelated events, and dispatches `.github/workflows/central-security-dispatch.yml` with the affected repository, ref, and commit SHA. The central workflow checks out that exact ref using an installation token and invokes the common scanner.
-
-The central dispatch workflow deliberately leaves CodeQL result upload disabled because the run belongs to `security-pipeline`, not the scanned repository. Use repository-local required workflows or caller workflows when code-scanning alerts must be stored against each application repository.
+The reusable workflow is the shared implementation, but it is not itself an organization-wide event listener. There is no `on:` value that subscribes one workflow to pushes or pull requests in all repositories. CodeQL default setup is the GitHub-native option for automatic source scanning; it runs in each repository and stores results against that repository.
 
 ## Step 1: Prepare the central repository
 
@@ -94,7 +62,7 @@ on:
   workflow_dispatch:
 ```
 
-If you cannot write to 10,000 repositories, an organization owner must install an approved GitHub App/event service. The app should subscribe to `push` and `pull_request` events, deduplicate by repository and commit SHA, and dispatch a central scan with the repository, ref, SHA, profile, and approved target metadata. Required workflows can enforce pull-request checks where supported, but they do not provide a universal push-event listener.
+If you cannot write to 10,000 repositories, an organization owner must enable CodeQL default setup in bulk where supported, or configure organization-required workflows. A central repository workflow cannot replace this organization-level configuration.
 
 ## Step 3: Choose application profile
 
@@ -279,7 +247,7 @@ Do not run 10,000 scans synchronously from one workflow job. Use:
 - Central coverage and failure dashboards.
 - Periodic reconciliation for missed events.
 
-For immediate push and pull request execution without modifying every repository, an organization GitHub App/event receiver is required. Without an external event receiver, GitHub Actions can provide required workflows for supported pull-request governance or scheduled polling, but not an immediate central push trigger.
+For automatic source scanning without modifying every repository, use CodeQL default setup. For custom ZAP checks, use organization-required workflows where available; otherwise each repository needs a caller workflow or a separate event service.
 
 ## Training
 

@@ -119,14 +119,14 @@ Run dependency, SBOM, package, source, and supply-chain tests. Active ZAP testin
 
 The demo workflow does not automatically receive events from other repositories. GitHub Actions `push` and `pull_request` events belong to the repository containing the workflow.
 
-For every push and pull request across 10,000 repositories, an organization owner must choose one:
+For automatic source scanning across 10,000 repositories, an organization owner should choose one:
 
-1. Copy the caller workflow into each repository.
+1. Enable CodeQL default setup across repositories.
 2. Use GitHub Enterprise required workflows for supported pull-request enforcement.
-3. Use an organization GitHub App/webhook to dispatch central scans.
+3. Copy the caller workflow into repositories that need custom OWASP checks.
 4. Use scheduled polling for delayed scans.
 
-There is no free GitHub Actions-only wildcard trigger that runs one central workflow immediately for every repository event without a caller, event service, or polling process.
+There is no free GitHub Actions-only wildcard trigger that runs one central workflow immediately for every repository event. CodeQL default setup is the GitHub-native option for automatic source scanning.
 
 ## OWASP method
 
