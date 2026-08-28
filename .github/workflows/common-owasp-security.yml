@@ -161,7 +161,7 @@ jobs:
           allow_issue_writing: false
       - name: Upload OWASP ZAP reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: owasp-zap-reports-${{ github.run_id }}
           if-no-files-found: warn
