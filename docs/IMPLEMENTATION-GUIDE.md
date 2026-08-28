@@ -20,14 +20,46 @@ The caller template is not an active workflow while it is under `docs/`. Copy it
 
 A workflow in `security-pipeline` cannot receive `push` or `pull_request` events from other repositories. GitHub evaluates those events in the repository containing the workflow file.
 
-Therefore, immediate scans for every push and pull request require one of these:
+Therefore, immediate scans for every push and pull request across repositories require one of these:
 
-1. Copy the caller template into each application repository.
-2. Use GitHub Enterprise Cloud required workflows/rulesets where available for pull requests.
-3. Use an organization GitHub App/webhook for central event delivery.
+1. Use an organization GitHub App/webhook for central event delivery. This is the required option when repositories cannot be modified.
+2. Use GitHub Enterprise Cloud required workflows/rulesets where available for pull-request enforcement.
+3. Copy the caller template into each application repository.
 4. Use scheduled polling for delayed scans without repository workflow files.
 
-A central reusable workflow is the correct shared implementation, but it is not itself an organization-wide event listener.
+A central reusable workflow is the shared implementation, but it is not itself an organization-wide event listener. There is no `on:` value that subscribes one workflow to pushes or pull requests in all repositories.
+
+## Central event service
+
+This repository includes a GitHub App webhook receiver at:
+
+```text
+POST /github/webhook
+```
+
+Run the Node service behind an HTTPS endpoint and configure a GitHub App installed on the organization with:
+
+- Repository metadata read access.
+- Contents read access.
+- Actions write access on `security-pipeline`.
+- Contents read access on repositories that will be scanned.
+- Code scanning write access only if results will be uploaded from a repository-local workflow.
+- Webhook subscriptions for `Push` and `Pull request`.
+
+Set these service environment variables:
+
+```text
+GITHUB_APP_ID
+GITHUB_APP_PRIVATE_KEY
+GITHUB_WEBHOOK_SECRET
+CENTRAL_REPOSITORY=sibydevops/security-pipeline
+CENTRAL_WORKFLOW_ID=central-security-dispatch.yml
+CENTRAL_WORKFLOW_REF=main
+```
+
+Store `GITHUB_APP_PRIVATE_KEY` with escaped newlines when supplied as one environment variable. Configure the organization webhook URL to the service URL plus `/github/webhook`. The receiver verifies `X-Hub-Signature-256`, ignores unrelated events, and dispatches `.github/workflows/central-security-dispatch.yml` with the affected repository, ref, and commit SHA. The central workflow checks out that exact ref using an installation token and invokes the common scanner.
+
+The central dispatch workflow deliberately leaves CodeQL result upload disabled because the run belongs to `security-pipeline`, not the scanned repository. Use repository-local required workflows or caller workflows when code-scanning alerts must be stored against each application repository.
 
 ## Step 1: Prepare the central repository
 
@@ -62,7 +94,7 @@ on:
   workflow_dispatch:
 ```
 
-If you cannot write to 10,000 repositories, an organization owner must configure required workflows, provide an approved GitHub App/event service, or accept scheduled polling. There is no GitHub Actions-only wildcard trigger for another repository's events.
+If you cannot write to 10,000 repositories, an organization owner must install an approved GitHub App/event service. The app should subscribe to `push` and `pull_request` events, deduplicate by repository and commit SHA, and dispatch a central scan with the repository, ref, SHA, profile, and approved target metadata. Required workflows can enforce pull-request checks where supported, but they do not provide a universal push-event listener.
 
 ## Step 3: Choose application profile
 
@@ -100,6 +132,8 @@ with:
 ## Step 4: Configure OWASP scans
 
 The common workflow runs CodeQL when a supported source language is detected on every push and pull request. OWASP ZAP is optional: it runs only when an authorized HTTP target or ephemeral application is configured. With no target URL, the source security checks still run and active testing is reported as not applicable.
+
+CodeQL result upload requires GitHub code scanning/Advanced Security to be enabled. Set the caller input `upload-codeql-results: true` (or repository variable `CODEQL_UPLOAD_RESULTS=true`) when that feature is available. Otherwise, set it to `false` so CodeQL still analyzes the source without failing during SARIF upload.
 
 ### Web applications
 

@@ -24,3 +24,4 @@ jobs:
       target-url: ${{ vars.OWASP_TARGET_URL }}
       openapi-spec: ${{ vars.OWASP_OPENAPI_SPEC }}
       run-zap: true
+      upload-codeql-results: ${{ vars.CODEQL_UPLOAD_RESULTS == 'true' }}

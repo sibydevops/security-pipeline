@@ -25,3 +25,4 @@ jobs:
       run-zap: true
       start-command: npm install --no-audit --no-fund && npm start
       health-url: http://127.0.0.1:3000/health
+      upload-codeql-results: false

@@ -33,6 +33,26 @@ on:
         required: false
         default: ''
         type: string
+      upload-codeql-results:
+        description: 'Upload CodeQL results to GitHub code scanning'
+        required: false
+        default: true
+        type: boolean
+      scan-repository:
+        description: 'Repository to scan; defaults to the workflow repository'
+        required: false
+        default: ''
+        type: string
+      scan-ref:
+        description: 'Git ref or commit SHA to scan; defaults to the workflow ref'
+        required: false
+        default: ''
+        type: string
+
+    secrets:
+      scan-token:
+        description: 'Token with read access to the target repository and code scanning write access'
+        required: false
 
 permissions:
   actions: read
@@ -49,6 +69,10 @@ jobs:
       active-test-required: ${{ steps.detect.outputs.active-test-required }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.scan-repository || github.repository }}
+          ref: ${{ inputs.scan-ref || github.sha }}
+          token: ${{ secrets.scan-token || github.token }}
 
       - id: detect
         shell: bash
@@ -107,6 +131,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.scan-repository || github.repository }}
+          ref: ${{ inputs.scan-ref || github.sha }}
+          token: ${{ secrets.scan-token || github.token }}
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ needs.profile.outputs.codeql-language }}
@@ -115,6 +143,7 @@ jobs:
       - uses: github/codeql-action/analyze@v3
         with:
           category: /owasp/${{ needs.profile.outputs.application-type }}
+          upload: ${{ inputs.upload-codeql-results }}
 
   zap:
     name: OWASP ZAP penetration test
@@ -123,6 +152,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.scan-repository || github.repository }}
+          ref: ${{ inputs.scan-ref || github.sha }}
+          token: ${{ secrets.scan-token || github.token }}
       - name: Set up Node.js
         if: inputs.start-command != ''
         uses: actions/setup-node@v4
