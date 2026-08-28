@@ -22,12 +22,12 @@ A workflow in `security-pipeline` cannot receive `push` or `pull_request` events
 
 Therefore, scans for every push and pull request across repositories require organization-level configuration:
 
-1. Enable CodeQL default setup for the repositories that need source scanning.
-2. Use GitHub Enterprise Cloud required workflows/rulesets where available for pull-request enforcement.
-3. Copy the caller template into each application repository when custom OWASP checks are required.
+1. Use the GitHub App plus central event receiver included in this repository when custom OWASP scans must run without repository edits.
+2. Enable CodeQL default setup for repositories that need source scanning.
+3. Use GitHub Enterprise Cloud required workflows/rulesets where available for pull-request enforcement.
 4. Use scheduled polling for delayed scans without repository workflow files.
 
-The reusable workflow is the shared implementation, but it is not itself an organization-wide event listener. There is no `on:` value that subscribes one workflow to pushes or pull requests in all repositories. CodeQL default setup is the GitHub-native option for automatic source scanning; it runs in each repository and stores results against that repository.
+The reusable workflow is the shared implementation, but it is not itself an organization-wide event listener. The included receiver provides that missing event layer. CodeQL default setup remains the GitHub-native option for automatic source scanning; it runs in each repository and stores results against that repository.
 
 ## Step 1: Prepare the central repository
 
@@ -38,6 +38,33 @@ sibydevops/security-pipeline/.github/workflows/common-owasp-security.yml
 ```
 
 Review all third-party actions and pin versions or commit SHAs according to organization supply-chain policy.
+
+Deploy the webhook receiver from this repository to a free Render web service using [render.yaml](../render.yaml). Render provides the service URL after deployment. Free services can sleep and have usage limits, so use a paid or managed queue-backed service for reliable 10,000-repository production volume.
+
+Create a GitHub App in the organization and install it on all repositories to be scanned. Enable `Push` and `Pull request` webhook events and grant:
+
+- Repository metadata: read-only.
+- Contents: read-only.
+- Actions: read and write for `security-pipeline`.
+
+Configure the App webhook URL as:
+
+```text
+https://YOUR-RENDER-SERVICE.onrender.com/github/webhook
+```
+
+Add these Render environment variables in **Dashboard > Service > Environment**:
+
+```text
+GITHUB_APP_ID=your-app-id
+GITHUB_APP_PRIVATE_KEY=complete-new-private-key
+GITHUB_WEBHOOK_SECRET=new-webhook-secret
+CENTRAL_REPOSITORY=sibydevops/security-pipeline
+CENTRAL_WORKFLOW_ID=central-security-dispatch.yml
+CENTRAL_WORKFLOW_REF=main
+```
+
+Add `SECURITY_APP_ID` and `SECURITY_APP_PRIVATE_KEY` as GitHub Actions secrets in [security-pipeline](https://github.com/sibydevops/security-pipeline/settings/secrets/actions). These are used by the central workflow to create a repository installation token.
 
 ## Step 2: Install the caller
 
@@ -62,7 +89,7 @@ on:
   workflow_dispatch:
 ```
 
-If you cannot write to 10,000 repositories, an organization owner must enable CodeQL default setup in bulk where supported, or configure organization-required workflows. A central repository workflow cannot replace this organization-level configuration.
+If you cannot write to 10,000 repositories, install the GitHub App at organization scope. A central repository workflow cannot receive cross-repository events without this event receiver or organization-required workflow configuration.
 
 ## Step 3: Choose application profile
 
@@ -247,7 +274,7 @@ Do not run 10,000 scans synchronously from one workflow job. Use:
 - Central coverage and failure dashboards.
 - Periodic reconciliation for missed events.
 
-For automatic source scanning without modifying every repository, use CodeQL default setup. For custom ZAP checks, use organization-required workflows where available; otherwise each repository needs a caller workflow or a separate event service.
+For automatic source scanning without modifying every repository, use CodeQL default setup or the included GitHub App receiver. The central dispatch workflow runs source/dependency checks for the affected commit. ZAP still requires an authorized target or ephemeral application; it cannot scan an unknown application without a runtime target.
 
 ## Training
 

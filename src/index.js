@@ -1,6 +1,9 @@
 const express = require('express');
+const { registerGithubWebhook } = require('./github-webhook');
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+registerGithubWebhook(app);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
