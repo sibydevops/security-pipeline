@@ -154,7 +154,7 @@ jobs:
           allow_issue_writing: false
       - name: OWASP ZAP baseline scan
         if: needs.profile.outputs.application-type != 'api' || inputs.openapi-spec == ''
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ inputs.target-url }}
           cmd_options: '-a'
