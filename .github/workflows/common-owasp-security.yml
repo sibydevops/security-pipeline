@@ -68,7 +68,7 @@ jobs:
       codeql-language: ${{ steps.detect.outputs.codeql-language }}
       active-test-required: ${{ steps.detect.outputs.active-test-required }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.scan-repository || github.repository }}
           ref: ${{ inputs.scan-ref || github.sha }}
@@ -130,7 +130,7 @@ jobs:
     if: needs.profile.outputs.codeql-language != 'none'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.scan-repository || github.repository }}
           ref: ${{ inputs.scan-ref || github.sha }}
@@ -151,7 +151,7 @@ jobs:
     if: needs.profile.outputs.active-test-required == 'true' && inputs.run-zap == true && (inputs.target-url != '' || inputs.start-command != '' || inputs.openapi-spec != '')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.scan-repository || github.repository }}
           ref: ${{ inputs.scan-ref || github.sha }}
