@@ -1,10 +1,39 @@
-# security-pipeline-demo
+# Central OWASP Security Workflow for GitHub
 
-This repository contains a lightweight reusable security workflow. The local workflow runs on every push, pull request, and manual dispatch, then profiles the repository in about five seconds.
+A central GitHub Actions reference implementation for scanning a changed repository and exact commit with:
 
-This repository starts its Node application ephemerally on the runner and scans `http://127.0.0.1:3000`, so no public target URL is needed. The reusable workflow runs CodeQL when a supported language is detected and ZAP only with an authorized target or ephemeral application. For organization-wide coverage, enable GitHub CodeQL default setup or an organization-required workflow. GitHub does not provide a central wildcard workflow that receives events from unrelated repositories.
+- Semgrep Community Edition SAST using open-source OWASP-oriented rules
+- OWASP ZAP baseline, full, or API DAST
+- Automatic repository classification for web, API, cloud-native, desktop, library, and unknown repositories
+- JSON, SARIF, HTML, Markdown, and ZAP report artifacts
+- Configurable security gate
+- No Gitleaks, Trivy, paid scanner, or scheduled trigger
 
-For a no-cost organization-wide proof of concept, deploy the included webhook receiver to Render using [render.yaml](render.yaml), install its GitHub App across the organization, and configure the webhook URL as `https://YOUR-SERVICE.onrender.com/github/webhook`. Setup details and required secrets are in [IMPLEMENTATION-GUIDE.md](docs/IMPLEMENTATION-GUIDE.md). Render's free service may sleep and is not suitable for guaranteed 10,000-repository production delivery.
+## Important trigger limitation
 
-Read [IMPLEMENTATION-GUIDE.md](docs/IMPLEMENTATION-GUIDE.md) for organization rollout, repository onboarding, authorized penetration-test targets, OWASP methodology, governance, and scaling guidance.
-For a no-cost local OWASP ZAP demonstration that requires no public URL, see [FREE-LOCAL-OWASP-SETUP.md](docs/FREE-LOCAL-OWASP-SETUP.md).
+A workflow in this central repository cannot automatically receive `push` or `pull_request` events from another repository. Choose one trigger pattern:
+
+1. Organization GitHub App or organization webhook sends `repository_dispatch` to this central repository. This requires no workflow in each application repository.
+2. A small caller workflow is placed in each application repository and calls the reusable workflow.
+3. An existing organization CI platform calls `workflow_dispatch` through the GitHub API.
+
+The central workflow is in `.github/workflows/central-security.yml`.
+
+## DAST limitation
+
+OWASP ZAP scans a running HTTP/HTTPS application, not source code. Supply `target_url` for web, API, cloud-native, Electron backend, or desktop applications exposing HTTP services. Repositories without a reachable target receive SAST and a documented `DAST_NOT_APPLICABLE` result.
+
+## Quick start
+
+1. Create a private repository such as `ORG/security-workflows`.
+2. Copy this project into it.
+3. Configure self-hosted runners labeled `self-hosted`, `linux`, `security` with Docker and network access to test targets.
+4. Add repository or organization secret `SECURITY_REPO_TOKEN` with read-only access to target repositories.
+5. Dispatch a test scan:
+
+```bash
+export GH_TOKEN='TOKEN_ALLOWED_TO_DISPATCH'
+./scripts/dispatch-scan.sh ORG/security-workflows ORG/app-repo COMMIT_SHA web https://staging.example.internal baseline
+```
+
+See `docs/IMPLEMENTATION-GUIDE.md` for production rollout.
