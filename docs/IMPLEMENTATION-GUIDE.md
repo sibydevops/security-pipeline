@@ -83,3 +83,9 @@ A status from a workflow running only in the central repository is not automatic
 ## 12. OWASP governance
 
 Use WSTG as the human and automated test catalog, ASVS as the application verification requirement baseline, and ZAP/Semgrep as partial automation. Automated ZAP does not cover business logic, role abuse, complex authorization, social engineering, or every WSTG test. Keep periodic manual penetration testing for high-risk applications.
+
+## 13. Complete penetration-testing workflow
+
+Use [OWASP-PENETRATION-TESTING-WORKFLOW.md](OWASP-PENETRATION-TESTING-WORKFLOW.md) for the operational assessment process. It covers written authorization and rules of engagement, scope and safety controls, reconnaissance, threat modeling, WSTG/ASVS/API/MASVS/cloud coverage, automated and manual execution, sanitized evidence, severity, reporting, risk decisions, remediation, retesting, and closure.
+
+The central workflow is one part of that process. A successful GitHub Actions run does not replace manual authorization, business-logic and authorization testing, coverage review, or an independent assessment for high-risk applications.

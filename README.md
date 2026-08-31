@@ -5,7 +5,7 @@ A central GitHub Actions reference implementation for scanning a changed reposit
 - Semgrep Community Edition SAST using open-source OWASP-oriented rules
 - OWASP ZAP baseline, full, or API DAST
 - Automatic repository classification for web, API, cloud-native, desktop, library, and unknown repositories
-- JSON, SARIF, HTML, Markdown, and ZAP report artifacts
+- JSON, SARIF, YAML, Markdown, and ZAP report artifacts
 - Configurable security gate
 - No Gitleaks, Trivy, paid scanner, or scheduled trigger
 
@@ -37,3 +37,7 @@ export GH_TOKEN='TOKEN_ALLOWED_TO_DISPATCH'
 ```
 
 See `docs/IMPLEMENTATION-GUIDE.md` for production rollout.
+
+For the complete authorized assessment lifecycle, including manual OWASP testing,
+evidence, reporting, remediation, and retesting, see
+`docs/OWASP-PENETRATION-TESTING-WORKFLOW.md`.
