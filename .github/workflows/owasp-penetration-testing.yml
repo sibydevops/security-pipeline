@@ -190,7 +190,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: owasp-pen-test-${{ needs.validate.outputs.sha }}
-          path: reports/
+          path: |
+            reports/
+            !reports/*.html
           if-no-files-found: warn
           retention-days: 30
 
@@ -205,6 +207,12 @@ jobs:
           pattern: 'owasp-pen-test-${{ needs.validate.outputs.sha }}'
           path: all-reports
           merge-multiple: true
+      - name: Validate YAML artifact exists
+        run: |
+          test -f all-reports/owasp-pen-test-summary.yaml || {
+            echo "OWASP YAML artifact missing";
+            exit 1;
+          }
       - name: Apply OWASP policy gate
         env:
           FAIL_ON_SAST: ${{ vars.FAIL_ON_SAST || 'ERROR' }}
