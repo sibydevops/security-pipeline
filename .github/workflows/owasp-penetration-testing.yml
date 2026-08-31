@@ -2,6 +2,10 @@ name: OWASP Penetration Testing
 run-name: OWASP Pen Test ${{ inputs.target_repository || github.event.client_payload.target_repository }}@${{ inputs.target_sha || github.event.client_payload.target_sha }}
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target_repository:
