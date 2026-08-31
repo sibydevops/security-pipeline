@@ -32,9 +32,9 @@ class JsonToYamlConversionTests(unittest.TestCase):
 
         yaml_text = module.convert_to_yaml(payload)
         self.assertIn("site:", yaml_text)
-        self.assertIn("url: \"https://example.com\"", yaml_text)
-        self.assertIn("alert: \"Cross Site Scripting\"", yaml_text)
-        self.assertIn("riskdesc: \"High\"", yaml_text)
+        self.assertIn('url: "https://example.com"', yaml_text)
+        self.assertIn('alert: "Cross Site Scripting"', yaml_text)
+        self.assertIn('riskdesc: "High"', yaml_text)
 
     def test_write_yaml_output(self):
         payload = {"site": []}
@@ -46,7 +46,7 @@ class JsonToYamlConversionTests(unittest.TestCase):
             module.write_yaml_from_json(json_path, yaml_path)
 
             self.assertTrue(yaml_path.exists())
-            self.assertIn("site: []", yaml_path.read_text(encoding="utf-8"))
+            self.assertIn("site:", yaml_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

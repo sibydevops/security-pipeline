@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-def scalar_to_yaml(value):
+def yaml_scalar(value):
     if value is None:
         return "null"
     if isinstance(value, bool):
@@ -15,7 +15,7 @@ def scalar_to_yaml(value):
 
 
 def convert_to_yaml(value, indent=0):
-    prefix = " " * indent
+    prefix = "  " * indent
 
     if isinstance(value, dict):
         if not value:
@@ -24,9 +24,9 @@ def convert_to_yaml(value, indent=0):
         for key, item in value.items():
             if isinstance(item, (dict, list)) and item:
                 lines.append(f"{prefix}{key}:")
-                lines.append(convert_to_yaml(item, indent + 2))
+                lines.append(convert_to_yaml(item, indent + 1))
             else:
-                lines.append(f"{prefix}{key}: {scalar_to_yaml(item)}")
+                lines.append(f"{prefix}{key}: {yaml_scalar(item)}")
         return "\n".join(lines)
 
     if isinstance(value, list):
@@ -35,22 +35,15 @@ def convert_to_yaml(value, indent=0):
         lines = []
         for item in value:
             if isinstance(item, (dict, list)):
-                if isinstance(item, dict):
-                    if not item:
-                        lines.append(f"{prefix}- {{}}")
-                        continue
-                    lines.append(f"{prefix}-")
-                    nested = convert_to_yaml(item, indent + 2)
-                    lines.append(nested.replace("\n", "\n" + " " * (indent + 2), 1))
-                else:
-                    lines.append(f"{prefix}-")
-                    nested = convert_to_yaml(item, indent + 2)
-                    lines.append(nested.replace("\n", "\n" + " " * (indent + 2), 1))
+                lines.append(f"{prefix}-")
+                nested = convert_to_yaml(item, indent + 1)
+                if nested.strip():
+                    lines.append(nested)
             else:
-                lines.append(f"{prefix}- {scalar_to_yaml(item)}")
+                lines.append(f"{prefix}- {yaml_scalar(item)}")
         return "\n".join(lines)
 
-    return f"{prefix}{scalar_to_yaml(value)}"
+    return f"{prefix}{yaml_scalar(value)}"
 
 
 def write_yaml_from_json(source_path, destination_path):
