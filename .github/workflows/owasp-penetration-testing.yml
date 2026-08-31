@@ -41,7 +41,7 @@ on:
 
 concurrency:
   group: owasp-pen-test-${{ inputs.target_repository || github.event.client_payload.target_repository }}-${{ inputs.target_sha || github.event.client_payload.target_sha }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
